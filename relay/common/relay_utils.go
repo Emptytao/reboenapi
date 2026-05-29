@@ -95,8 +95,10 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 	}
 
 	if durationStr := formData.Get("seconds"); durationStr != "" {
+		req.Seconds = durationStr
 		if duration, err := strconv.Atoi(durationStr); err == nil {
 			req.Duration = duration
+			req.DurationSet = true
 		}
 	}
 

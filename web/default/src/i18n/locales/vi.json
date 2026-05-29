@@ -1934,6 +1934,7 @@
     "High-risk status code retry risk check 4": "Tôi đã kiểm tra kỹ các quy tắc chuyển hướng mã trạng thái ở trên và xác nhận chúng chính xác.",
     "High-risk status code retry risk disclaimer": "Các quy tắc chuyển hướng mã trạng thái sau chứa cấu hình rủi ro cao. Thử lại trên các mã này có thể phát sinh phí không thể thu hồi. Vui lòng xác minh cẩn thận.",
     "Higher priority channels are selected first": "Các kênh ưu tiên cao hơn được chọn trước tiên",
+    "HKCOPP": "HKCOPP",
     "Historical Usage": "Lịch sử sử dụng",
     "History of Midjourney-style image tasks.": "Lịch sử các tác vụ hình ảnh kiểu Midjourney.",
     "Hit criteria: If cached tokens exist in usage, it counts as a hit.": "Tiêu chí trúng: Nếu cached tokens tồn tại trong usage, được tính là trúng.",

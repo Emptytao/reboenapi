@@ -1934,6 +1934,7 @@
     "High-risk status code retry risk check 4": "我已仔细核查以上状态码重定向规则，并确认配置正确。",
     "High-risk status code retry risk disclaimer": "以下状态码重定向规则包含高风险配置。在这些状态码上重试可能导致上游正常扣费且无法追回。请仔细核实这些配置。",
     "Higher priority channels are selected first": "优先级更高的渠道优先被选中",
+    "HKCOPP": "HKCOPP",
     "Historical Usage": "历史使用情况",
     "History of Midjourney-style image tasks.": "Midjourney 风格图像任务历史。",
     "Hit criteria: If cached tokens exist in usage, it counts as a hit.": "命中判定：usage 中存在 cached tokens 即视为命中。",

@@ -1934,6 +1934,7 @@
     "High-risk status code retry risk check 4": "上記のステータスコードリダイレクトルールを注意深く確認し、正しいことを確認しました。",
     "High-risk status code retry risk disclaimer": "以下のステータスコードリダイレクトルールには高リスクの設定が含まれています。これらのステータスコードでリトライすると、上流の正常な課金が発生し、回収できない可能性があります。",
     "Higher priority channels are selected first": "優先度の高いチャネルが先に選択されます",
+    "HKCOPP": "HKCOPP",
     "Historical Usage": "履歴使用状況",
     "History of Midjourney-style image tasks.": "Midjourneyスタイルの画像タスクの履歴。",
     "Hit criteria: If cached tokens exist in usage, it counts as a hit.": "ヒット判定：usage に cached tokens が存在すればヒットとみなします。",

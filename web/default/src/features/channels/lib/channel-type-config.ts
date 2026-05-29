@@ -134,6 +134,17 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       baseUrl: 'Default: https://api.replicate.com',
     },
   },
+  58: {
+    id: 58,
+    name: CHANNEL_TYPES[58],
+    icon: 'kling',
+    defaultBaseUrl: 'https://api.hkcopp.online/openapi/v1',
+    hints: {
+      baseUrl: 'Default: https://api.hkcopp.online/openapi/v1',
+      key: 'HKCOPP API Key',
+      models: 'seedance-2-official,seedance-2-intl-fast,kling-v3-pro,veo-3.1',
+    },
+  },
 }
 
 /**

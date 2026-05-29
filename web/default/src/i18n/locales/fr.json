@@ -1934,6 +1934,7 @@
     "High-risk status code retry risk check 4": "J'ai soigneusement vérifié les règles de redirection de codes d'état ci-dessus et confirme qu'elles sont correctes.",
     "High-risk status code retry risk disclaimer": "Les règles de redirection suivantes contiennent des configurations à haut risque. La relance sur ces codes d'état peut entraîner des frais normaux en amont non récupérables. Veuillez vérifier soigneusement.",
     "Higher priority channels are selected first": "Les canaux de priorité plus élevée sont sélectionnés en premier",
+    "HKCOPP": "HKCOPP",
     "Historical Usage": "Utilisation historique",
     "History of Midjourney-style image tasks.": "Historique des tâches d'images style Midjourney.",
     "Hit criteria: If cached tokens exist in usage, it counts as a hit.": "Critère de hit : si des tokens en cache existent dans l'utilisation, cela compte comme un hit.",
