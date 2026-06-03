@@ -22,7 +22,7 @@ import {
   ERROR_MESSAGES,
   MODEL_FETCHABLE_TYPES,
 } from '../constants'
-import type { Channel } from '../types'
+import type { Channel, SpottedFrogModelMap } from '../types'
 
 // ============================================================================
 // Form Validation Schema
@@ -120,6 +120,193 @@ function addRequiredIssue(
   })
 }
 
+const SPOTTEDFROG_MODEL_MAP_FORM_SCHEMA = {
+  spottedfrog_sora_2_16x9_4s: z.string().optional(),
+  spottedfrog_sora_2_16x9_8s: z.string().optional(),
+  spottedfrog_sora_2_16x9_12s: z.string().optional(),
+  spottedfrog_sora_2_9x16_4s: z.string().optional(),
+  spottedfrog_sora_2_9x16_8s: z.string().optional(),
+  spottedfrog_sora_2_9x16_12s: z.string().optional(),
+  spottedfrog_sora_2_pro_16x9_12s: z.string().optional(),
+  spottedfrog_sora_2_pro_9x16_12s: z.string().optional(),
+  spottedfrog_omni_flash: z.string().optional(),
+  spottedfrog_grok_imagine_video: z.string().optional(),
+  spottedfrog_veo_fast_16x9_8s_1080p: z.string().optional(),
+  spottedfrog_veo_fast_9x16_8s_1080p: z.string().optional(),
+  spottedfrog_veo_standard_16x9_8s_1080p: z.string().optional(),
+  spottedfrog_veo_standard_9x16_8s_1080p: z.string().optional(),
+  spottedfrog_veo_ref_16x9_8s_1080p: z.string().optional(),
+  spottedfrog_veo_ref_9x16_8s_1080p: z.string().optional(),
+}
+
+export const SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS = {
+  spottedfrog_sora_2_16x9_4s: 'sora-2-4s-16x9',
+  spottedfrog_sora_2_16x9_8s: 'sora-2-8s-16x9',
+  spottedfrog_sora_2_16x9_12s: 'sora-2-12s-16x9',
+  spottedfrog_sora_2_9x16_4s: 'sora-2-4s-9x16',
+  spottedfrog_sora_2_9x16_8s: 'sora-2-8s-9x16',
+  spottedfrog_sora_2_9x16_12s: 'sora-2-12s-9x16',
+  spottedfrog_sora_2_pro_16x9_12s: 'sora2-pro-12s-16x9',
+  spottedfrog_sora_2_pro_9x16_12s: 'sora2-pro-12s-9x16',
+  spottedfrog_omni_flash: 'omni_flash',
+  spottedfrog_grok_imagine_video: 'grok-imagine-video',
+  spottedfrog_veo_fast_16x9_8s_1080p: 'firefly-veo31-fast-8s-16x9-1080p',
+  spottedfrog_veo_fast_9x16_8s_1080p: 'firefly-veo31-fast-8s-9x16-1080p',
+  spottedfrog_veo_standard_16x9_8s_1080p:
+    'firefly-veo31-standard-8s-16x9-1080p',
+  spottedfrog_veo_standard_9x16_8s_1080p:
+    'firefly-veo31-standard-8s-9x16-1080p',
+  spottedfrog_veo_ref_16x9_8s_1080p: 'firefly-veo31-ref-8s-16x9-1080p',
+  spottedfrog_veo_ref_9x16_8s_1080p: 'firefly-veo31-ref-8s-9x16-1080p',
+} as const
+
+type SpottedFrogModelMapFieldName =
+  keyof typeof SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS
+
+export const SPOTTEDFROG_MODEL_MAP_FORM_GROUPS: Array<{
+  title: string
+  description: string
+  fields: Array<{
+    name: SpottedFrogModelMapFieldName
+    label: string
+  }>
+}> = [
+  {
+    title: 'Sora 2',
+    description:
+      'Keep the Sora duration and aspect routing rules in code, and override only the final upstream model names.',
+    fields: [
+      { name: 'spottedfrog_sora_2_16x9_4s', label: '16:9 / 4s' },
+      { name: 'spottedfrog_sora_2_16x9_8s', label: '16:9 / 8s' },
+      { name: 'spottedfrog_sora_2_16x9_12s', label: '16:9 / 12s' },
+      { name: 'spottedfrog_sora_2_9x16_4s', label: '9:16 / 4s' },
+      { name: 'spottedfrog_sora_2_9x16_8s', label: '9:16 / 8s' },
+      { name: 'spottedfrog_sora_2_9x16_12s', label: '9:16 / 12s' },
+    ],
+  },
+  {
+    title: 'Sora 2 Pro',
+    description: 'Only the 12-second Pro model names are configurable.',
+    fields: [
+      { name: 'spottedfrog_sora_2_pro_16x9_12s', label: '16:9 / 12s' },
+      { name: 'spottedfrog_sora_2_pro_9x16_12s', label: '9:16 / 12s' },
+    ],
+  },
+  {
+    title: 'Direct Models',
+    description:
+      'These models keep the existing routing behavior and only swap the final upstream model string.',
+    fields: [
+      { name: 'spottedfrog_omni_flash', label: 'omni_flash' },
+      {
+        name: 'spottedfrog_grok_imagine_video',
+        label: 'grok-imagine-video',
+      },
+    ],
+  },
+  {
+    title: 'Veo',
+    description:
+      'Only the fixed Veo combinations are configurable. Other combinations still use the built-in fallback pattern.',
+    fields: [
+      {
+        name: 'spottedfrog_veo_fast_16x9_8s_1080p',
+        label: 'fast / 16:9 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_fast_9x16_8s_1080p',
+        label: 'fast / 9:16 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_standard_16x9_8s_1080p',
+        label: 'standard / 16:9 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_standard_9x16_8s_1080p',
+        label: 'standard / 9:16 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_ref_16x9_8s_1080p',
+        label: 'reference / 16:9 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_ref_9x16_8s_1080p',
+        label: 'reference / 9:16 / 8s / 1080p',
+      },
+    ],
+  },
+]
+
+const SPOTTEDFROG_MODEL_MAP_SETTINGS_KEYS: Record<
+  SpottedFrogModelMapFieldName,
+  keyof SpottedFrogModelMap
+> = {
+  spottedfrog_sora_2_16x9_4s: 'sora_2_16x9_4s',
+  spottedfrog_sora_2_16x9_8s: 'sora_2_16x9_8s',
+  spottedfrog_sora_2_16x9_12s: 'sora_2_16x9_12s',
+  spottedfrog_sora_2_9x16_4s: 'sora_2_9x16_4s',
+  spottedfrog_sora_2_9x16_8s: 'sora_2_9x16_8s',
+  spottedfrog_sora_2_9x16_12s: 'sora_2_9x16_12s',
+  spottedfrog_sora_2_pro_16x9_12s: 'sora_2_pro_16x9_12s',
+  spottedfrog_sora_2_pro_9x16_12s: 'sora_2_pro_9x16_12s',
+  spottedfrog_omni_flash: 'omni_flash',
+  spottedfrog_grok_imagine_video: 'grok_imagine_video',
+  spottedfrog_veo_fast_16x9_8s_1080p: 'veo_fast_16x9_8s_1080p',
+  spottedfrog_veo_fast_9x16_8s_1080p: 'veo_fast_9x16_8s_1080p',
+  spottedfrog_veo_standard_16x9_8s_1080p: 'veo_standard_16x9_8s_1080p',
+  spottedfrog_veo_standard_9x16_8s_1080p: 'veo_standard_9x16_8s_1080p',
+  spottedfrog_veo_ref_16x9_8s_1080p: 'veo_ref_16x9_8s_1080p',
+  spottedfrog_veo_ref_9x16_8s_1080p: 'veo_ref_9x16_8s_1080p',
+}
+
+function buildSpottedFrogModelMapFormValues(
+  overrides?: Partial<SpottedFrogModelMap> | null
+): Record<SpottedFrogModelMapFieldName, string> {
+  const values = { ...SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS }
+  if (!overrides) {
+    return values
+  }
+  for (const name of Object.keys(
+    SPOTTEDFROG_MODEL_MAP_SETTINGS_KEYS
+  ) as SpottedFrogModelMapFieldName[]) {
+    const settingKey = SPOTTEDFROG_MODEL_MAP_SETTINGS_KEYS[name]
+    const overrideValue = overrides[settingKey]
+    if (typeof overrideValue === 'string' && overrideValue.trim()) {
+      values[name] = overrideValue.trim()
+    }
+  }
+  return values
+}
+
+function buildSpottedFrogModelMapOverrides(
+  formData: ChannelFormValues
+): Partial<SpottedFrogModelMap> | undefined {
+  const overrides: Partial<SpottedFrogModelMap> = {}
+  for (const name of Object.keys(
+    SPOTTEDFROG_MODEL_MAP_SETTINGS_KEYS
+  ) as SpottedFrogModelMapFieldName[]) {
+    const value = String(formData[name] || '').trim()
+    if (value && value !== SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS[name]) {
+      overrides[SPOTTEDFROG_MODEL_MAP_SETTINGS_KEYS[name]] = value
+    }
+  }
+  return Object.keys(overrides).length > 0 ? overrides : undefined
+}
+
+export function hasSpottedFrogModelMapOverrides(values: ChannelFormValues): boolean {
+  for (const name of Object.keys(
+    SPOTTEDFROG_MODEL_MAP_SETTINGS_KEYS
+  ) as SpottedFrogModelMapFieldName[]) {
+    if (
+      String(values[name] || '').trim() !==
+      SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS[name]
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
 export const channelFormSchema = z
   .object({
     name: z.string().min(1, ERROR_MESSAGES.REQUIRED_NAME),
@@ -199,6 +386,7 @@ export const channelFormSchema = z
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
     upstream_model_update_ignored_models: z.string().optional(),
+    ...SPOTTEDFROG_MODEL_MAP_FORM_SCHEMA,
   })
   .superRefine((data, ctx) => {
     if ([3, 8, 36, 45].includes(data.type) && !data.base_url?.trim()) {
@@ -316,6 +504,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
+  ...SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS,
 }
 
 // ============================================================================
@@ -370,6 +559,7 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateCheckEnabled = false
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
+  let spottedFrogModelMapValues = buildSpottedFrogModelMapFormValues()
 
   if (channel.settings) {
     try {
@@ -394,6 +584,11 @@ export function transformChannelToFormDefaults(
       )
         ? parsed.upstream_model_update_ignored_models.join(',')
         : ''
+      spottedFrogModelMapValues = buildSpottedFrogModelMapFormValues(
+        isJsonObjectValue(parsed.spottedfrog_model_map)
+          ? (parsed.spottedfrog_model_map as Partial<SpottedFrogModelMap>)
+          : undefined
+      )
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -443,6 +638,7 @@ export function transformChannelToFormDefaults(
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
+    ...spottedFrogModelMapValues,
   }
 }
 
@@ -565,6 +761,17 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     if (typeof settingsObj.upstream_model_update_last_check_time !== 'number') {
       settingsObj.upstream_model_update_last_check_time = 0
     }
+  }
+
+  if (formData.type === 59) {
+    const spottedFrogModelMap = buildSpottedFrogModelMapOverrides(formData)
+    if (spottedFrogModelMap) {
+      settingsObj.spottedfrog_model_map = spottedFrogModelMap
+    } else if ('spottedfrog_model_map' in settingsObj) {
+      delete settingsObj.spottedfrog_model_map
+    }
+  } else if ('spottedfrog_model_map' in settingsObj) {
+    delete settingsObj.spottedfrog_model_map
   }
 
   return JSON.stringify(settingsObj)

@@ -139,7 +139,10 @@ import {
   extractMappingSourceModels,
   hasModelConfigChanged,
   findMissingModelsInMapping,
+  hasSpottedFrogModelMapOverrides,
   validateModelMappingJson,
+  SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS,
+  SPOTTEDFROG_MODEL_MAP_FORM_GROUPS,
 } from '../../lib'
 import {
   collectInvalidStatusCodeEntries,
@@ -219,6 +222,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
     values.claude_beta_query ||
+    hasSpottedFrogModelMapOverrides(values) ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
     values.upstream_model_update_ignored_models?.trim()
@@ -372,6 +376,7 @@ export function ChannelMutateDrawer({
   const currentModels = form.watch('models')
   const currentName = form.watch('name')
   const currentModelMapping = form.watch('model_mapping')
+  const isSpottedFrogChannel = currentType === 59
   const awsKeyType = form.watch('aws_key_type')
   const upstreamModelUpdateCheckEnabled = form.watch(
     'upstream_model_update_check_enabled'
@@ -394,6 +399,17 @@ export function ChannelMutateDrawer({
       resetDoubaoApiUnlock()
     }
   }, [open, resetDoubaoApiUnlock])
+
+  const resetSpottedFrogModelMap = useCallback(() => {
+    for (const [name, value] of Object.entries(
+      SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS
+    )) {
+      form.setValue(name as keyof ChannelFormValues, value, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+    }
+  }, [form])
 
   // Helper computed values
   const isBatchMode =
@@ -3250,6 +3266,88 @@ export function ChannelMutateDrawer({
                           </FormItem>
                         )}
                       />
+
+                      {isSpottedFrogChannel && (
+                        <div className='border-border/60 flex flex-col gap-4 border-y py-4'>
+                          <div className='flex items-start justify-between gap-3'>
+                            <div className='space-y-1'>
+                              <SubHeading
+                                title={t('SpottedFrog Model Mapping')}
+                                icon={<Route className='h-3.5 w-3.5' />}
+                              />
+                              <p className='text-muted-foreground text-sm'>
+                                {t(
+                                  'Override only the final upstream model names. The built-in duration, aspect ratio, and reference-image routing rules stay unchanged.'
+                                )}
+                              </p>
+                            </div>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={resetSpottedFrogModelMap}
+                            >
+                              <RefreshCw className='mr-2 h-3.5 w-3.5' />
+                              {t('Reset to defaults')}
+                            </Button>
+                          </div>
+                          <div className='space-y-4'>
+                            {SPOTTEDFROG_MODEL_MAP_FORM_GROUPS.map((group) => (
+                              <div
+                                key={group.title}
+                                className='rounded-lg border p-4'
+                              >
+                                <div className='mb-3 space-y-1'>
+                                  <div className='text-sm font-medium'>
+                                    {t(group.title)}
+                                  </div>
+                                  <p className='text-muted-foreground text-xs'>
+                                    {t(group.description)}
+                                  </p>
+                                </div>
+                                <div className='grid gap-4 md:grid-cols-2'>
+                                  {group.fields.map((mappingField) => (
+                                    <FormField
+                                      key={mappingField.name}
+                                      control={form.control}
+                                      name={mappingField.name}
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>
+                                            {t(mappingField.label)}
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              {...field}
+                                              value={field.value ?? ''}
+                                              placeholder={
+                                                SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS[
+                                                  mappingField.name
+                                                ]
+                                              }
+                                            />
+                                          </FormControl>
+                                          <FormDescription>
+                                            {t('Default')}:&nbsp;
+                                            <code className='text-xs'>
+                                              {
+                                                SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS[
+                                                  mappingField.name
+                                                ]
+                                              }
+                                            </code>
+                                          </FormDescription>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {MODEL_FETCHABLE_TYPES.has(currentType) && (
                         <div className='border-border/60 flex flex-col gap-3 border-y py-4'>

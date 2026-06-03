@@ -339,7 +339,7 @@ func applyModelMapping(_ *gin.Context, info *relaycommon.RelayInfo, req *relayco
 	if info.UpstreamModelName == "" {
 		info.UpstreamModelName = req.Model
 	}
-	upstream, err := mapUpstreamModel(req, info.UpstreamModelName)
+	upstream, err := mapUpstreamModel(req, info.UpstreamModelName, info.ChannelOtherSettings.SpottedFrogModelMap)
 	if err != nil {
 		return err
 	}
@@ -347,11 +347,12 @@ func applyModelMapping(_ *gin.Context, info *relaycommon.RelayInfo, req *relayco
 	return nil
 }
 
-func mapUpstreamModel(req *relaycommon.TaskSubmitReq, modelName string) (string, error) {
+func mapUpstreamModel(req *relaycommon.TaskSubmitReq, modelName string, overrides *dto.SpottedFrogModelMap) (string, error) {
 	logicalModel := strings.TrimSpace(modelName)
 	if logicalModel == "" {
 		logicalModel = strings.TrimSpace(req.Model)
 	}
+	effectiveModelMap := mergeSpottedFrogModelMap(overrides)
 	var meta metadataPayload
 	_ = taskcommon.UnmarshalMetadata(req.Metadata, &meta)
 	duration, ok := requestDuration(req)
@@ -374,14 +375,17 @@ func mapUpstreamModel(req *relaycommon.TaskSubmitReq, modelName string) (string,
 			if duration != 12 {
 				return "", fmt.Errorf("sora-2 pro only supports 12 seconds")
 			}
-			return fmt.Sprintf("sora2-pro-12s-%s", aspect), nil
+			return mapSoraProModel(effectiveModelMap, aspect), nil
 		}
-		return fmt.Sprintf("sora-2-%ds-%s", duration, aspect), nil
+		return mapSoraModel(effectiveModelMap, duration, aspect), nil
 	case "omni_flash", "grok-imagine-video":
 		if logicalModel == "omni_flash" && len(normalizedImages(req, meta)) > 7 {
 			return "", fmt.Errorf("omni_flash supports at most 7 reference images")
 		}
-		return logicalModel, nil
+		if logicalModel == "omni_flash" {
+			return effectiveModelMap.OmniFlash, nil
+		}
+		return effectiveModelMap.GrokImagineVideo, nil
 	case "veo":
 		if !ok || duration <= 0 {
 			duration = 8
@@ -398,29 +402,76 @@ func mapUpstreamModel(req *relaycommon.TaskSubmitReq, modelName string) (string,
 			mode = "standard"
 		}
 		hasReference := len(normalizedImages(req, meta)) > 0
-		return mapVeoModel(mode, duration, aspect, resolution, hasReference), nil
+		return mapVeoModel(effectiveModelMap, mode, duration, aspect, resolution, hasReference), nil
 	default:
 		return logicalModel, nil
 	}
 }
 
-func mapVeoModel(mode string, duration int, aspect, resolution string, hasReference bool) string {
+func mapSoraModel(effective dto.SpottedFrogModelMap, duration int, aspect string) string {
+	switch aspect {
+	case "16x9":
+		switch duration {
+		case 4:
+			return effective.Sora216x94s
+		case 8:
+			return effective.Sora216x98s
+		default:
+			return effective.Sora216x912s
+		}
+	case "9x16":
+		switch duration {
+		case 4:
+			return effective.Sora29x164s
+		case 8:
+			return effective.Sora29x168s
+		default:
+			return effective.Sora29x1612s
+		}
+	default:
+		return fmt.Sprintf("sora-2-%ds-%s", duration, aspect)
+	}
+}
+
+func mapSoraProModel(effective dto.SpottedFrogModelMap, aspect string) string {
+	switch aspect {
+	case "9x16":
+		return effective.Sora2Pro9x1612s
+	default:
+		return effective.Sora2Pro16x912s
+	}
+}
+
+func mapVeoModel(effective dto.SpottedFrogModelMap, mode string, duration int, aspect, resolution string, hasReference bool) string {
 	if hasReference {
 		mode = "ref"
 	}
-	key := veoModelKey{
-		Mode:       mode,
-		Duration:   duration,
-		Aspect:     aspect,
-		Resolution: resolution,
-	}
-	if modelName, ok := veoModelMap[key]; ok {
+	if modelName, ok := fixedVeoModel(effective, mode, duration, aspect, resolution); ok {
 		return modelName
 	}
 	if hasReference {
 		return fmt.Sprintf("firefly-veo31-ref-%ds-%s-%s", duration, aspect, resolution)
 	}
 	return fmt.Sprintf("firefly-veo31-%s-%ds-%s-%s", mode, duration, aspect, resolution)
+}
+
+func fixedVeoModel(effective dto.SpottedFrogModelMap, mode string, duration int, aspect, resolution string) (string, bool) {
+	switch {
+	case mode == "fast" && duration == 8 && aspect == "16x9" && resolution == "1080p":
+		return effective.VeoFast16x98s1080p, true
+	case mode == "fast" && duration == 8 && aspect == "9x16" && resolution == "1080p":
+		return effective.VeoFast9x168s1080p, true
+	case mode == "standard" && duration == 8 && aspect == "16x9" && resolution == "1080p":
+		return effective.VeoStd16x98s1080p, true
+	case mode == "standard" && duration == 8 && aspect == "9x16" && resolution == "1080p":
+		return effective.VeoStd9x168s1080p, true
+	case mode == "ref" && duration == 8 && aspect == "16x9" && resolution == "1080p":
+		return effective.VeoRef16x98s1080p, true
+	case mode == "ref" && duration == 8 && aspect == "9x16" && resolution == "1080p":
+		return effective.VeoRef9x168s1080p, true
+	default:
+		return "", false
+	}
 }
 
 func normalizedImages(req *relaycommon.TaskSubmitReq, meta metadataPayload) []string {

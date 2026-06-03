@@ -88,6 +88,25 @@ export interface ChannelSettings {
   system_prompt_override?: boolean
 }
 
+export interface SpottedFrogModelMap {
+  sora_2_16x9_4s?: string
+  sora_2_16x9_8s?: string
+  sora_2_16x9_12s?: string
+  sora_2_9x16_4s?: string
+  sora_2_9x16_8s?: string
+  sora_2_9x16_12s?: string
+  sora_2_pro_16x9_12s?: string
+  sora_2_pro_9x16_12s?: string
+  omni_flash?: string
+  grok_imagine_video?: string
+  veo_fast_16x9_8s_1080p?: string
+  veo_fast_9x16_8s_1080p?: string
+  veo_standard_16x9_8s_1080p?: string
+  veo_standard_9x16_8s_1080p?: string
+  veo_ref_16x9_8s_1080p?: string
+  veo_ref_9x16_8s_1080p?: string
+}
+
 export interface ChannelOtherSettings {
   azure_responses_version?: string
   vertex_key_type?: 'json' | 'api_key'
@@ -105,6 +124,7 @@ export interface ChannelOtherSettings {
   upstream_model_update_ignored_models?: string[]
   upstream_model_update_last_check_time?: number
   upstream_model_update_last_detected_models?: string[]
+  spottedfrog_model_map?: SpottedFrogModelMap
 }
 
 // ============================================================================

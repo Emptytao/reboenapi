@@ -130,7 +130,7 @@ func TestMapUpstreamModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := mapUpstreamModel(&tt.req, tt.modelName)
+			got, err := mapUpstreamModel(&tt.req, tt.modelName, nil)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error")
@@ -144,6 +144,134 @@ func TestMapUpstreamModel(t *testing.T) {
 				t.Fatalf("model = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMapUpstreamModelConfigurableOverrides(t *testing.T) {
+	overrides := &dto.SpottedFrogModelMap{
+		Sora216x98s:        "custom-sora-landscape-8s",
+		OmniFlash:          "custom-omni-flash",
+		GrokImagineVideo:   "custom-grok-video",
+		VeoRef16x98s1080p:  "custom-veo-ref",
+		VeoFast16x98s1080p: "custom-veo-fast",
+	}
+
+	tests := []struct {
+		name      string
+		req       relaycommon.TaskSubmitReq
+		modelName string
+		want      string
+	}{
+		{
+			name:      "sora override",
+			modelName: "sora-2",
+			req:       relaycommon.TaskSubmitReq{Model: "sora-2", Duration: 8, DurationSet: true, Size: "1920x1080"},
+			want:      "custom-sora-landscape-8s",
+		},
+		{
+			name:      "omni override",
+			modelName: "omni_flash",
+			req:       relaycommon.TaskSubmitReq{Model: "omni_flash"},
+			want:      "custom-omni-flash",
+		},
+		{
+			name:      "grok override",
+			modelName: "grok-imagine-video",
+			req:       relaycommon.TaskSubmitReq{Model: "grok-imagine-video"},
+			want:      "custom-grok-video",
+		},
+		{
+			name:      "veo fixed override",
+			modelName: "veo",
+			req:       relaycommon.TaskSubmitReq{Model: "veo", Duration: 8, DurationSet: true, Size: "1920x1080", Images: []string{"https://example.com/ref.jpg"}},
+			want:      "custom-veo-ref",
+		},
+		{
+			name:      "veo fast override",
+			modelName: "veo",
+			req:       relaycommon.TaskSubmitReq{Model: "veo", Duration: 8, DurationSet: true, Size: "1920x1080"},
+			want:      "custom-veo-fast",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := mapUpstreamModel(&tt.req, tt.modelName, overrides)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("model = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMapUpstreamModelPartialOverrideFallsBackToDefaults(t *testing.T) {
+	got, err := mapUpstreamModel(
+		&relaycommon.TaskSubmitReq{
+			Model:       "sora-2",
+			Duration:    12,
+			DurationSet: true,
+			Size:        "1080x1920",
+		},
+		"sora-2",
+		&dto.SpottedFrogModelMap{
+			Sora216x98s: "custom-sora-landscape-8s",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "sora-2-12s-9x16" {
+		t.Fatalf("model = %q", got)
+	}
+}
+
+func TestMapUpstreamModelVeoNonFixedFallback(t *testing.T) {
+	got, err := mapUpstreamModel(
+		&relaycommon.TaskSubmitReq{
+			Model:       "veo",
+			Duration:    12,
+			DurationSet: true,
+			Size:        "1920x1080",
+			Metadata:    map[string]interface{}{"speed": "fast"},
+		},
+		"veo",
+		&dto.SpottedFrogModelMap{
+			VeoFast16x98s1080p: "custom-veo-fast",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "firefly-veo31-fast-12s-16x9-1080p" {
+		t.Fatalf("model = %q", got)
+	}
+}
+
+func TestApplyModelMappingUsesMappedLogicalModelAndChannelOverrides(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "sora-2",
+			ChannelOtherSettings: dto.ChannelOtherSettings{
+				SpottedFrogModelMap: &dto.SpottedFrogModelMap{
+					Sora216x94s: "channel-specific-sora",
+				},
+			},
+		},
+	}
+	req := relaycommon.TaskSubmitReq{
+		Model:       "public-sora",
+		Duration:    4,
+		DurationSet: true,
+		Size:        "1920x1080",
+	}
+	if err := applyModelMapping(nil, info, &req); err != nil {
+		t.Fatal(err)
+	}
+	if info.UpstreamModelName != "channel-specific-sora" {
+		t.Fatalf("UpstreamModelName = %q", info.UpstreamModelName)
 	}
 }
 

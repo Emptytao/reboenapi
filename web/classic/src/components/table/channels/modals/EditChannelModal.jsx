@@ -129,6 +129,139 @@ const PARAM_OVERRIDE_OPERATIONS_TEMPLATE = {
 
 const DEPRECATED_DOUBAO_CODING_PLAN_BASE_URL = 'doubao-coding-plan';
 
+const SPOTTEDFROG_MODEL_MAP_DEFAULTS = {
+  spottedfrog_sora_2_16x9_4s: 'sora-2-4s-16x9',
+  spottedfrog_sora_2_16x9_8s: 'sora-2-8s-16x9',
+  spottedfrog_sora_2_16x9_12s: 'sora-2-12s-16x9',
+  spottedfrog_sora_2_9x16_4s: 'sora-2-4s-9x16',
+  spottedfrog_sora_2_9x16_8s: 'sora-2-8s-9x16',
+  spottedfrog_sora_2_9x16_12s: 'sora-2-12s-9x16',
+  spottedfrog_sora_2_pro_16x9_12s: 'sora2-pro-12s-16x9',
+  spottedfrog_sora_2_pro_9x16_12s: 'sora2-pro-12s-9x16',
+  spottedfrog_omni_flash: 'omni_flash',
+  spottedfrog_grok_imagine_video: 'grok-imagine-video',
+  spottedfrog_veo_fast_16x9_8s_1080p: 'firefly-veo31-fast-8s-16x9-1080p',
+  spottedfrog_veo_fast_9x16_8s_1080p: 'firefly-veo31-fast-8s-9x16-1080p',
+  spottedfrog_veo_standard_16x9_8s_1080p:
+    'firefly-veo31-standard-8s-16x9-1080p',
+  spottedfrog_veo_standard_9x16_8s_1080p:
+    'firefly-veo31-standard-8s-9x16-1080p',
+  spottedfrog_veo_ref_16x9_8s_1080p: 'firefly-veo31-ref-8s-16x9-1080p',
+  spottedfrog_veo_ref_9x16_8s_1080p: 'firefly-veo31-ref-8s-9x16-1080p',
+};
+
+const SPOTTEDFROG_MODEL_MAP_FIELD_MAP = {
+  spottedfrog_sora_2_16x9_4s: 'sora_2_16x9_4s',
+  spottedfrog_sora_2_16x9_8s: 'sora_2_16x9_8s',
+  spottedfrog_sora_2_16x9_12s: 'sora_2_16x9_12s',
+  spottedfrog_sora_2_9x16_4s: 'sora_2_9x16_4s',
+  spottedfrog_sora_2_9x16_8s: 'sora_2_9x16_8s',
+  spottedfrog_sora_2_9x16_12s: 'sora_2_9x16_12s',
+  spottedfrog_sora_2_pro_16x9_12s: 'sora_2_pro_16x9_12s',
+  spottedfrog_sora_2_pro_9x16_12s: 'sora_2_pro_9x16_12s',
+  spottedfrog_omni_flash: 'omni_flash',
+  spottedfrog_grok_imagine_video: 'grok_imagine_video',
+  spottedfrog_veo_fast_16x9_8s_1080p: 'veo_fast_16x9_8s_1080p',
+  spottedfrog_veo_fast_9x16_8s_1080p: 'veo_fast_9x16_8s_1080p',
+  spottedfrog_veo_standard_16x9_8s_1080p: 'veo_standard_16x9_8s_1080p',
+  spottedfrog_veo_standard_9x16_8s_1080p: 'veo_standard_9x16_8s_1080p',
+  spottedfrog_veo_ref_16x9_8s_1080p: 'veo_ref_16x9_8s_1080p',
+  spottedfrog_veo_ref_9x16_8s_1080p: 'veo_ref_9x16_8s_1080p',
+};
+
+const SPOTTEDFROG_MODEL_MAP_GROUPS = [
+  {
+    title: 'Sora 2',
+    description: '仅覆盖最终上游模型名，时长和横竖屏路由规则保持内置逻辑。',
+    fields: [
+      { name: 'spottedfrog_sora_2_16x9_4s', label: '16:9 / 4s' },
+      { name: 'spottedfrog_sora_2_16x9_8s', label: '16:9 / 8s' },
+      { name: 'spottedfrog_sora_2_16x9_12s', label: '16:9 / 12s' },
+      { name: 'spottedfrog_sora_2_9x16_4s', label: '9:16 / 4s' },
+      { name: 'spottedfrog_sora_2_9x16_8s', label: '9:16 / 8s' },
+      { name: 'spottedfrog_sora_2_9x16_12s', label: '9:16 / 12s' },
+    ],
+  },
+  {
+    title: 'Sora 2 Pro',
+    description: 'Pro 仅支持 12 秒，因此这里只开放两个固定组合。',
+    fields: [
+      { name: 'spottedfrog_sora_2_pro_16x9_12s', label: '16:9 / 12s' },
+      { name: 'spottedfrog_sora_2_pro_9x16_12s', label: '9:16 / 12s' },
+    ],
+  },
+  {
+    title: 'Direct Models',
+    description: '直接替换文档原模型名对应的最终上游模型字符串。',
+    fields: [
+      { name: 'spottedfrog_omni_flash', label: 'omni_flash' },
+      {
+        name: 'spottedfrog_grok_imagine_video',
+        label: 'grok-imagine-video',
+      },
+    ],
+  },
+  {
+    title: 'Veo',
+    description: '仅固定的 Veo 组合可配置，其他组合继续使用系统内置回退命名。',
+    fields: [
+      {
+        name: 'spottedfrog_veo_fast_16x9_8s_1080p',
+        label: 'fast / 16:9 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_fast_9x16_8s_1080p',
+        label: 'fast / 9:16 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_standard_16x9_8s_1080p',
+        label: 'standard / 16:9 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_standard_9x16_8s_1080p',
+        label: 'standard / 9:16 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_ref_16x9_8s_1080p',
+        label: 'reference / 16:9 / 8s / 1080p',
+      },
+      {
+        name: 'spottedfrog_veo_ref_9x16_8s_1080p',
+        label: 'reference / 9:16 / 8s / 1080p',
+      },
+    ],
+  },
+];
+
+function buildSpottedFrogModelMapInputs(overrides) {
+  const values = { ...SPOTTEDFROG_MODEL_MAP_DEFAULTS };
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    return values;
+  }
+  Object.entries(SPOTTEDFROG_MODEL_MAP_FIELD_MAP).forEach(
+    ([fieldName, settingsKey]) => {
+      const value = overrides[settingsKey];
+      if (typeof value === 'string' && value.trim()) {
+        values[fieldName] = value.trim();
+      }
+    },
+  );
+  return values;
+}
+
+function buildSpottedFrogModelMapOverrides(inputs) {
+  const overrides = {};
+  Object.entries(SPOTTEDFROG_MODEL_MAP_FIELD_MAP).forEach(
+    ([fieldName, settingsKey]) => {
+      const value = String(inputs[fieldName] || '').trim();
+      if (value && value !== SPOTTEDFROG_MODEL_MAP_DEFAULTS[fieldName]) {
+        overrides[settingsKey] = value;
+      }
+    },
+  );
+  return overrides;
+}
+
 // 支持并且已适配通过接口获取模型列表的渠道类型
 const MODEL_FETCHABLE_TYPES = new Set([
   1, 4, 14, 34, 17, 26, 27, 24, 47, 25, 20, 23, 31, 40, 42, 48, 43,
@@ -219,6 +352,7 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_check_time: 0,
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
+    ...buildSpottedFrogModelMapInputs(),
   };
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
@@ -568,6 +702,16 @@ const EditChannelModal = (props) => {
     settings[key] = value;
     const settingsJson = JSON.stringify(settings);
     handleInputChange('settings', settingsJson);
+  };
+
+  const resetSpottedFrogModelMap = () => {
+    const defaults = buildSpottedFrogModelMapInputs();
+    setInputs((prev) => ({ ...prev, ...defaults }));
+    if (formApiRef.current) {
+      Object.entries(defaults).forEach(([key, value]) => {
+        formApiRef.current.setValue(key, value);
+      });
+    }
   };
 
   const applyClipboardConfig = (config) => {
@@ -931,6 +1075,10 @@ const EditChannelModal = (props) => {
           )
             ? parsedSettings.upstream_model_update_ignored_models.join(',')
             : '';
+          Object.assign(
+            data,
+            buildSpottedFrogModelMapInputs(parsedSettings.spottedfrog_model_map),
+          );
         } catch (error) {
           console.error('解析其他设置失败:', error);
           data.azure_responses_version = '';
@@ -950,6 +1098,7 @@ const EditChannelModal = (props) => {
           data.upstream_model_update_last_check_time = 0;
           data.upstream_model_update_last_detected_models = [];
           data.upstream_model_update_ignored_models = '';
+          Object.assign(data, buildSpottedFrogModelMapInputs());
         }
       } else {
         // 兼容历史数据：老渠道没有 settings 时，默认按 json 展示
@@ -968,6 +1117,7 @@ const EditChannelModal = (props) => {
         data.upstream_model_update_last_check_time = 0;
         data.upstream_model_update_last_detected_models = [];
         data.upstream_model_update_ignored_models = '';
+        Object.assign(data, buildSpottedFrogModelMapInputs());
       }
 
       if (
@@ -1830,6 +1980,17 @@ const EditChannelModal = (props) => {
       settings.upstream_model_update_last_check_time = 0;
     }
 
+    if (localInputs.type === 59) {
+      const spottedFrogModelMap = buildSpottedFrogModelMapOverrides(localInputs);
+      if (Object.keys(spottedFrogModelMap).length > 0) {
+        settings.spottedfrog_model_map = spottedFrogModelMap;
+      } else if ('spottedfrog_model_map' in settings) {
+        delete settings.spottedfrog_model_map;
+      }
+    } else if ('spottedfrog_model_map' in settings) {
+      delete settings.spottedfrog_model_map;
+    }
+
     localInputs.settings = JSON.stringify(settings);
 
     // 清理不需要发送到后端的字段
@@ -1857,6 +2018,9 @@ const EditChannelModal = (props) => {
     delete localInputs.upstream_model_update_last_check_time;
     delete localInputs.upstream_model_update_last_detected_models;
     delete localInputs.upstream_model_update_ignored_models;
+    Object.keys(SPOTTEDFROG_MODEL_MAP_DEFAULTS).forEach((fieldName) => {
+      delete localInputs[fieldName];
+    });
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
@@ -2301,6 +2465,65 @@ const EditChannelModal = (props) => {
                         </span>
                       </>
                     )}
+                  </div>
+                </div>
+                )}
+
+                {inputs.type === 59 && (
+                <div className='py-3 border-b border-gray-100'>
+                  <div className='flex items-center justify-between gap-3 mb-3'>
+                    <div>
+                      <Text className='text-sm font-medium text-gray-500 block'>
+                        {t('斑点蛙模型映射')}
+                      </Text>
+                      <Text type='tertiary' size='small'>
+                        {t('仅覆盖最终上游模型名，现有时长、横竖屏和参考图路由逻辑保持不变')}
+                      </Text>
+                    </div>
+                    <Button
+                      size='small'
+                      type='tertiary'
+                      icon={<IconBolt size={14} />}
+                      onClick={resetSpottedFrogModelMap}
+                    >
+                      {t('恢复默认')}
+                    </Button>
+                  </div>
+
+                  <div className='space-y-4'>
+                    {SPOTTEDFROG_MODEL_MAP_GROUPS.map((group) => (
+                      <div
+                        key={group.title}
+                        className='rounded-xl p-3'
+                        style={{
+                          backgroundColor: 'var(--semi-color-fill-0)',
+                          border: '1px solid var(--semi-color-fill-2)',
+                        }}
+                      >
+                        <Text className='text-sm font-medium block mb-1'>
+                          {t(group.title)}
+                        </Text>
+                        <Text type='tertiary' size='small'>
+                          {t(group.description)}
+                        </Text>
+                        <Row gutter={12} className='mt-3'>
+                          {group.fields.map((field) => (
+                            <Col span={12} key={field.name}>
+                              <Form.Input
+                                field={field.name}
+                                label={t(field.label)}
+                                placeholder={SPOTTEDFROG_MODEL_MAP_DEFAULTS[field.name]}
+                                extraText={`${t('默认值')}: ${SPOTTEDFROG_MODEL_MAP_DEFAULTS[field.name]}`}
+                                onChange={(value) =>
+                                  handleInputChange(field.name, value)
+                                }
+                                showClear
+                              />
+                            </Col>
+                          ))}
+                        </Row>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 )}
