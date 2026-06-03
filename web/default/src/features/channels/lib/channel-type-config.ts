@@ -145,6 +145,17 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'seedance-2-official,seedance-2-intl-fast,kling-v3-pro,veo-3.1',
     },
   },
+  59: {
+    id: 59,
+    name: CHANNEL_TYPES[59],
+    icon: 'kling',
+    defaultBaseUrl: 'https://api.hellobabygo.com',
+    hints: {
+      baseUrl: 'Default: https://api.hellobabygo.com',
+      key: 'SpottedFrog API Key',
+      models: 'sora-2,omni_flash,grok-imagine-video,veo',
+    },
+  },
 }
 
 /**

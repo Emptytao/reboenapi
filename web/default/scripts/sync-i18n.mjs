@@ -80,6 +80,7 @@ const BRAND_AND_LITERAL_KEYS = new Set([
   'Quota:',
   'Replicate',
   'SiliconFlow',
+  'SpottedFrog',
   'Stripe',
   'Submodel',
   'SunoAPI',
@@ -316,5 +317,4 @@ main().catch((err) => {
   console.error(err)
   process.exitCode = 1
 })
-
 

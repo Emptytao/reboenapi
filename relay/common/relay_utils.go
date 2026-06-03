@@ -86,20 +86,56 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 
 	formData := c.Request.PostForm
 	req = TaskSubmitReq{
-		Prompt:   formData.Get("prompt"),
-		Model:    formData.Get("model"),
-		Mode:     formData.Get("mode"),
-		Image:    formData.Get("image"),
-		Size:     formData.Get("size"),
-		Metadata: make(map[string]interface{}),
+		Prompt:         formData.Get("prompt"),
+		Model:          formData.Get("model"),
+		Mode:           formData.Get("mode"),
+		Image:          formData.Get("image"),
+		Size:           formData.Get("size"),
+		ResponseFormat: formData.Get("response_format"),
+		Metadata:       make(map[string]interface{}),
 	}
 
 	if durationStr := formData.Get("seconds"); durationStr != "" {
 		req.Seconds = durationStr
+		req.SecondsSet = true
 		if duration, err := strconv.Atoi(durationStr); err == nil {
 			req.Duration = duration
 			req.DurationSet = true
 		}
+	}
+	if durationStr := formData.Get("duration"); durationStr != "" {
+		if duration, err := strconv.Atoi(durationStr); err == nil {
+			req.Duration = duration
+			req.DurationSet = true
+		}
+	}
+	if widthStr := formData.Get("width"); widthStr != "" {
+		if width, err := strconv.Atoi(widthStr); err == nil {
+			req.Width = &width
+		}
+	}
+	if heightStr := formData.Get("height"); heightStr != "" {
+		if height, err := strconv.Atoi(heightStr); err == nil {
+			req.Height = &height
+		}
+	}
+	if fpsStr := formData.Get("fps"); fpsStr != "" {
+		if fps, err := strconv.Atoi(fpsStr); err == nil {
+			req.Fps = &fps
+		}
+	}
+	if seedStr := formData.Get("seed"); seedStr != "" {
+		if seed, err := strconv.Atoi(seedStr); err == nil {
+			req.Seed = &seed
+		}
+	}
+	if nStr := formData.Get("n"); nStr != "" {
+		if n, err := strconv.Atoi(nStr); err == nil {
+			req.N = &n
+		}
+	}
+	if req.Size == "" && req.Width != nil && req.Height != nil && *req.Width > 0 && *req.Height > 0 {
+		req.Size = fmt.Sprintf("%dx%d", *req.Width, *req.Height)
 	}
 
 	if images := formData["images"]; len(images) > 0 {
@@ -192,6 +228,13 @@ func isKnownTaskField(field string) bool {
 		"images":          true,
 		"size":            true,
 		"duration":        true,
+		"seconds":         true,
+		"width":           true,
+		"height":          true,
+		"fps":             true,
+		"seed":            true,
+		"n":               true,
+		"response_format": true,
 		"input_reference": true, // Sora 特有字段
 	}
 	return knownFields[field]
@@ -206,10 +249,11 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 		if err != nil {
 			return createTaskError(err, "invalid_multipart_form", http.StatusBadRequest, true)
 		}
-	}
-	// 为了metadata字段的兼容性，统一UnmarshalBodyReusable
-	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
-		return createTaskError(err, "invalid_request", http.StatusBadRequest, true)
+	} else {
+		// 为了metadata字段的兼容性，统一UnmarshalBodyReusable
+		if err := common.UnmarshalBodyReusable(c, &req); err != nil {
+			return createTaskError(err, "invalid_request", http.StatusBadRequest, true)
+		}
 	}
 
 	if taskErr := validatePrompt(req.Prompt); taskErr != nil {
