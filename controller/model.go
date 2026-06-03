@@ -95,7 +95,17 @@ func init() {
 	channelId2Models = make(map[int][]string)
 	for i := 1; i <= constant.ChannelTypeDummy; i++ {
 		apiType, success := common.ChannelType2APIType(i)
-		if !success || apiType == constant.APITypeAIProxyLibrary {
+		if !success {
+			taskAdaptor := relay.GetTaskAdaptor(constant.TaskPlatform(fmt.Sprintf("%d", i)))
+			if taskAdaptor != nil {
+				taskAdaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+					ChannelType: i,
+				}})
+				channelId2Models[i] = taskAdaptor.GetModelList()
+			}
+			continue
+		}
+		if apiType == constant.APITypeAIProxyLibrary {
 			continue
 		}
 		meta := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{

@@ -399,6 +399,7 @@ export function getChannelIcon(channelType) {
       return <Coze size={iconSize} />;
     case 50: // 可灵 Kling
     case 58: // HKCOPP
+    case 59: // 斑点蛙 SpottedFrog
       return <Kling.Color size={iconSize} />;
     case 51: // 即梦 Jimeng
       return <Jimeng.Color size={iconSize} />;

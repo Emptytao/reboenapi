@@ -157,6 +157,8 @@ function type2secretPrompt(type) {
       return '请输入 JSON 格式的 OAuth 凭据（必须包含 access_token 和 account_id）';
     case 58:
       return 'HKCOPP API Key';
+    case 59:
+      return 'SpottedFrog API Key';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
