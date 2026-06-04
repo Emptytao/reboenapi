@@ -41,6 +41,7 @@ var channelUpstreamModelUpdateSelectFields = []string{
 	"base_url",
 	"models",
 	"model_mapping",
+	"model_routing_rules",
 	"settings",
 	"setting",
 	"other",

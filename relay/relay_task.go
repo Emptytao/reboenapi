@@ -160,15 +160,31 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 2. 确定模型名称
 	modelName := info.OriginModelName
+	if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		if requestedModel := strings.TrimSpace(req.Model); requestedModel != "" {
+			modelName = requestedModel
+		}
+	}
 	if modelName == "" {
 		modelName = service.CoverTaskActionToModelName(platform, info.Action)
 	}
 
-	// 2.5 应用渠道的模型映射（与同步任务对齐）
+	// 2.5 应用视频模型路由规则，再回退到旧 model_mapping
 	info.OriginModelName = modelName
 	info.UpstreamModelName = modelName
-	if err := helper.ModelMappedHelper(c, info, nil); err != nil {
-		return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+	if _, err := relaycommon.ApplyVideoModelRoutingWithRelayInfo(c, info); err != nil {
+		return nil, service.TaskErrorWrapperLocal(err, "model_routing_rules_invalid", http.StatusBadRequest)
+	}
+	if !info.IsModelMapped {
+		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+		}
+	}
+	if err := relaycommon.ApplyTaskParamOverrideWithRelayInfo(c, info); err != nil {
+		if fixedErr, ok := relaycommon.AsParamOverrideReturnError(err); ok {
+			return nil, service.TaskErrorFromAPIError(relaycommon.NewAPIErrorFromParamOverride(fixedErr))
+		}
+		return nil, service.TaskErrorWrapperLocal(err, "param_override_invalid", http.StatusBadRequest)
 	}
 
 	// 3. 预生成公开 task ID（仅首次）

@@ -126,6 +126,9 @@ import {
 import { useChannelMutateForm } from '../../hooks/use-channel-mutate-form'
 import {
   CHANNEL_FORM_DEFAULT_VALUES,
+  buildSpottedFrogLegacyRoutingRules,
+  buildSpottedFrogModelMapOverrides,
+  buildVideoModelRoutingTemplate,
   channelFormSchema,
   channelsQueryKeys,
   transformChannelToFormDefaults,
@@ -158,6 +161,7 @@ import {
 } from '../dialogs/missing-models-confirmation-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
+import { VideoModelRoutingEditorDialog } from '../dialogs/video-model-routing-editor-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
 import {
   ChannelAdvancedSection,
@@ -208,6 +212,7 @@ function readAdvancedSettingsPreference(): boolean {
 function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
   return Boolean(
     values.model_mapping?.trim() ||
+    values.model_routing_rules?.trim() ||
     values.param_override?.trim() ||
     values.header_override?.trim() ||
     values.status_code_mapping?.trim() ||
@@ -305,6 +310,7 @@ export function ChannelMutateDrawer({
   >(null)
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
+  const [modelRoutingEditorOpen, setModelRoutingEditorOpen] = useState(false)
 
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
@@ -410,6 +416,18 @@ export function ChannelMutateDrawer({
       })
     }
   }, [form])
+  const importSpottedFrogRoutingRules = useCallback(() => {
+    const overrides = buildSpottedFrogModelMapOverrides(form.getValues())
+    form.setValue(
+      'model_routing_rules',
+      buildSpottedFrogLegacyRoutingRules(overrides),
+      {
+        shouldDirty: true,
+        shouldValidate: true,
+      }
+    )
+    toast.success(t('Imported legacy SpottedFrog mappings into routing rules'))
+  }, [form, t])
 
   // Helper computed values
   const isBatchMode =
@@ -2664,6 +2682,86 @@ export function ChannelMutateDrawer({
 
                         <FormField
                           control={form.control}
+                          name='model_routing_rules'
+                          render={({ field }) => (
+                            <FormItem className='space-y-3'>
+                              <div className='flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between'>
+                                <div className='space-y-1'>
+                                  <FormLabel>
+                                    {t('Video Model Routing Rules')}
+                                  </FormLabel>
+                                  <FormDescription>
+                                    {t(
+                                      'Route standard video requests to different upstream models before legacy model_mapping runs.'
+                                    )}
+                                  </FormDescription>
+                                </div>
+                                <div className='flex flex-wrap gap-2'>
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    size='sm'
+                                    onClick={() =>
+                                      setModelRoutingEditorOpen(true)
+                                    }
+                                  >
+                                    <Wand2 className='mr-2 h-4 w-4' />
+                                    {t('Visual edit')}
+                                  </Button>
+                                  <Button
+                                    type='button'
+                                    variant='outline'
+                                    size='sm'
+                                    onClick={() =>
+                                      field.onChange(
+                                        buildVideoModelRoutingTemplate()
+                                      )
+                                    }
+                                  >
+                                    <Code className='mr-2 h-4 w-4' />
+                                    {t('Template')}
+                                  </Button>
+                                  {isSpottedFrogChannel && (
+                                    <Button
+                                      type='button'
+                                      variant='outline'
+                                      size='sm'
+                                      onClick={importSpottedFrogRoutingRules}
+                                    >
+                                      <Route className='mr-2 h-4 w-4' />
+                                      {t('Import SpottedFrog legacy rules')}
+                                    </Button>
+                                  )}
+                                  <Button
+                                    type='button'
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => field.onChange('')}
+                                    disabled={!field.value?.trim()}
+                                  >
+                                    <Trash2 className='mr-2 h-4 w-4' />
+                                    {t('Clear')}
+                                  </Button>
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Textarea
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                  rows={10}
+                                  className='font-mono text-xs'
+                                  placeholder={t(
+                                    'Paste model_routing_rules JSON or use Visual edit.'
+                                  )}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
                           name='status_code_mapping'
                           render={({ field }) => (
                             <FormItem className='space-y-3'>
@@ -3501,6 +3599,20 @@ export function ChannelMutateDrawer({
           onOpenChange={setParamOverrideEditorOpen}
           onSave={(nextValue) => {
             form.setValue('param_override', nextValue, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }}
+        />
+      )}
+
+      {modelRoutingEditorOpen && (
+        <VideoModelRoutingEditorDialog
+          open={modelRoutingEditorOpen}
+          value={form.watch('model_routing_rules') || ''}
+          onOpenChange={setModelRoutingEditorOpen}
+          onSave={(nextValue) => {
+            form.setValue('model_routing_rules', nextValue, {
               shouldDirty: true,
               shouldValidate: true,
             })

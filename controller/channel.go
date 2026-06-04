@@ -716,15 +716,16 @@ func DeleteDisabledChannel(c *gin.Context) {
 }
 
 type ChannelTag struct {
-	Tag            string  `json:"tag"`
-	NewTag         *string `json:"new_tag"`
-	Priority       *int64  `json:"priority"`
-	Weight         *uint   `json:"weight"`
-	ModelMapping   *string `json:"model_mapping"`
-	Models         *string `json:"models"`
-	Groups         *string `json:"groups"`
-	ParamOverride  *string `json:"param_override"`
-	HeaderOverride *string `json:"header_override"`
+	Tag               string  `json:"tag"`
+	NewTag            *string `json:"new_tag"`
+	Priority          *int64  `json:"priority"`
+	Weight            *uint   `json:"weight"`
+	ModelMapping      *string `json:"model_mapping"`
+	ModelRoutingRules *string `json:"model_routing_rules"`
+	Models            *string `json:"models"`
+	Groups            *string `json:"groups"`
+	ParamOverride     *string `json:"param_override"`
+	HeaderOverride    *string `json:"header_override"`
 }
 
 func DisableTagChannels(c *gin.Context) {
@@ -812,7 +813,15 @@ func EditTagChannels(c *gin.Context) {
 		}
 		channelTag.HeaderOverride = common.GetPointer[string](trimmed)
 	}
-	err = model.EditChannelByTag(channelTag.Tag, channelTag.NewTag, channelTag.ModelMapping, channelTag.Models, channelTag.Groups, channelTag.Priority, channelTag.Weight, channelTag.ParamOverride, channelTag.HeaderOverride)
+	if channelTag.ModelRoutingRules != nil {
+		trimmed := strings.TrimSpace(*channelTag.ModelRoutingRules)
+		if trimmed == "" {
+			channelTag.ModelRoutingRules = common.GetPointer[string]("")
+		} else {
+			channelTag.ModelRoutingRules = common.GetPointer[string](trimmed)
+		}
+	}
+	err = model.EditChannelByTag(channelTag.Tag, channelTag.NewTag, channelTag.ModelMapping, channelTag.ModelRoutingRules, channelTag.Models, channelTag.Groups, channelTag.Priority, channelTag.Weight, channelTag.ParamOverride, channelTag.HeaderOverride)
 	if err != nil {
 		common.ApiError(c, err)
 		return

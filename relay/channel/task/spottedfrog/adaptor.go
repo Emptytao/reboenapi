@@ -99,9 +99,6 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if err != nil {
 		return service.TaskErrorWrapper(err, "get_task_request_failed", http.StatusBadRequest)
 	}
-	if err := applyModelMapping(c, info, &req); err != nil {
-		return service.TaskErrorWrapperLocal(err, "invalid_video_model_mapping", http.StatusBadRequest)
-	}
 	var meta metadataPayload
 	_ = taskcommon.UnmarshalMetadata(req.Metadata, &meta)
 	images := normalizedImages(&req, meta)
@@ -216,14 +213,11 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &meta); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
-	if err := applyModelMapping(nil, info, req); err != nil {
-		return nil, err
-	}
 	images := normalizedImages(req, meta)
 	duration, durationSet := requestDuration(req)
 	aspect := requestAspectRatio(req.Size, meta)
 	body := &requestPayload{
-		Model:          info.UpstreamModelName,
+		Model:          taskcommon.DefaultString(info.UpstreamModelName, req.Model),
 		Prompt:         req.Prompt,
 		Size:           req.Size,
 		AspectRatio:    aspect,

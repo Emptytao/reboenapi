@@ -62,6 +62,7 @@ import SingleModelSelectModal from './SingleModelSelectModal';
 import OllamaModelModal from './OllamaModelModal';
 import CodexOAuthModal from './CodexOAuthModal';
 import ParamOverrideEditorModal from './ParamOverrideEditorModal';
+import VideoModelRoutingEditorModal from './VideoModelRoutingEditorModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
 import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
@@ -262,6 +263,335 @@ function buildSpottedFrogModelMapOverrides(inputs) {
   return overrides;
 }
 
+function buildVideoModelRoutingTemplate() {
+  return JSON.stringify(
+    {
+      version: 1,
+      rules: [
+        {
+          name: 'sora-2 8s 16:9',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            { path: 'derived.original_model', mode: 'full', value: 'sora-2' },
+            { path: 'derived.duration', mode: 'full', value: 8 },
+            { path: 'derived.aspect_ratio', mode: 'full', value: '16:9' },
+          ],
+          target_model: 'sora-2-8s-16x9',
+          operations: [
+            {
+              path: 'request.metadata.variant',
+              mode: 'delete',
+            },
+          ],
+        },
+      ],
+    },
+    null,
+    2,
+  );
+}
+
+function buildVideoRoutingCondition(path, value, options = {}) {
+  return {
+    path,
+    mode: options.mode || 'full',
+    value,
+    invert: options.invert || undefined,
+    pass_missing_key: options.pass_missing_key || undefined,
+  };
+}
+
+function buildSpottedFrogLegacyRoutingRules(inputs) {
+  const defaults = buildSpottedFrogModelMapInputs();
+  const overrides = buildSpottedFrogModelMapInputs(
+    buildSpottedFrogModelMapOverrides(inputs),
+  );
+  const effective = { ...defaults, ...overrides };
+  return JSON.stringify(
+    {
+      version: 1,
+      rules: [
+        {
+          name: 'Sora 2 16:9 4s',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'sora-2'),
+            buildVideoRoutingCondition('derived.duration', 4),
+            buildVideoRoutingCondition('derived.aspect_ratio', '16:9', {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('request.metadata.variant', 'pro', {
+              invert: true,
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_sora_2_16x9_4s,
+        },
+        {
+          name: 'Sora 2 16:9 8s',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'sora-2'),
+            buildVideoRoutingCondition('derived.duration', 8),
+            buildVideoRoutingCondition('derived.aspect_ratio', '16:9', {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('request.metadata.variant', 'pro', {
+              invert: true,
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_sora_2_16x9_8s,
+        },
+        {
+          name: 'Sora 2 16:9 12s',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'sora-2'),
+            buildVideoRoutingCondition('derived.duration', 12, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '16:9', {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('request.metadata.variant', 'pro', {
+              invert: true,
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_sora_2_16x9_12s,
+        },
+        {
+          name: 'Sora 2 9:16 4s',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'sora-2'),
+            buildVideoRoutingCondition('derived.duration', 4),
+            buildVideoRoutingCondition('derived.aspect_ratio', '9:16'),
+            buildVideoRoutingCondition('request.metadata.variant', 'pro', {
+              invert: true,
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_sora_2_9x16_4s,
+        },
+        {
+          name: 'Sora 2 9:16 8s',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'sora-2'),
+            buildVideoRoutingCondition('derived.duration', 8),
+            buildVideoRoutingCondition('derived.aspect_ratio', '9:16'),
+            buildVideoRoutingCondition('request.metadata.variant', 'pro', {
+              invert: true,
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_sora_2_9x16_8s,
+        },
+        {
+          name: 'Sora 2 9:16 12s',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'sora-2'),
+            buildVideoRoutingCondition('derived.duration', 12, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '9:16'),
+            buildVideoRoutingCondition('request.metadata.variant', 'pro', {
+              invert: true,
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_sora_2_9x16_12s,
+        },
+        {
+          name: 'Sora 2 Pro 16:9 12s',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'sora-2'),
+            buildVideoRoutingCondition('request.metadata.variant', 'pro'),
+            buildVideoRoutingCondition('derived.duration', 12, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '16:9', {
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_sora_2_pro_16x9_12s,
+        },
+        {
+          name: 'Sora 2 Pro 9:16 12s',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'sora-2'),
+            buildVideoRoutingCondition('request.metadata.variant', 'pro'),
+            buildVideoRoutingCondition('derived.duration', 12, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '9:16'),
+          ],
+          target_model: effective.spottedfrog_sora_2_pro_9x16_12s,
+        },
+        {
+          name: 'Omni Flash',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'omni_flash'),
+          ],
+          target_model: effective.spottedfrog_omni_flash,
+        },
+        {
+          name: 'Grok Imagine Video',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition(
+              'derived.original_model',
+              'grok-imagine-video',
+            ),
+          ],
+          target_model: effective.spottedfrog_grok_imagine_video,
+        },
+        {
+          name: 'Veo Fast 16:9 8s 1080p',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'veo'),
+            buildVideoRoutingCondition('request.metadata.speed', 'standard', {
+              invert: true,
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.image_count', 0),
+            buildVideoRoutingCondition('derived.duration', 8, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '16:9', {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.resolution', '1080p', {
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_veo_fast_16x9_8s_1080p,
+        },
+        {
+          name: 'Veo Fast 9:16 8s 1080p',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'veo'),
+            buildVideoRoutingCondition('request.metadata.speed', 'standard', {
+              invert: true,
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.image_count', 0),
+            buildVideoRoutingCondition('derived.duration', 8, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '9:16'),
+            buildVideoRoutingCondition('derived.resolution', '1080p', {
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_veo_fast_9x16_8s_1080p,
+        },
+        {
+          name: 'Veo Standard 16:9 8s 1080p',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'veo'),
+            buildVideoRoutingCondition('request.metadata.speed', 'standard'),
+            buildVideoRoutingCondition('derived.image_count', 0),
+            buildVideoRoutingCondition('derived.duration', 8, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '16:9', {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.resolution', '1080p', {
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_veo_standard_16x9_8s_1080p,
+        },
+        {
+          name: 'Veo Standard 9:16 8s 1080p',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'veo'),
+            buildVideoRoutingCondition('request.metadata.speed', 'standard'),
+            buildVideoRoutingCondition('derived.image_count', 0),
+            buildVideoRoutingCondition('derived.duration', 8, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '9:16'),
+            buildVideoRoutingCondition('derived.resolution', '1080p', {
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_veo_standard_9x16_8s_1080p,
+        },
+        {
+          name: 'Veo Ref 16:9 8s 1080p',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'veo'),
+            buildVideoRoutingCondition('derived.image_count', 0, {
+              mode: 'gt',
+            }),
+            buildVideoRoutingCondition('derived.duration', 8, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '16:9', {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.resolution', '1080p', {
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_veo_ref_16x9_8s_1080p,
+        },
+        {
+          name: 'Veo Ref 9:16 8s 1080p',
+          enabled: true,
+          logic: 'AND',
+          conditions: [
+            buildVideoRoutingCondition('derived.original_model', 'veo'),
+            buildVideoRoutingCondition('derived.image_count', 0, {
+              mode: 'gt',
+            }),
+            buildVideoRoutingCondition('derived.duration', 8, {
+              pass_missing_key: true,
+            }),
+            buildVideoRoutingCondition('derived.aspect_ratio', '9:16'),
+            buildVideoRoutingCondition('derived.resolution', '1080p', {
+              pass_missing_key: true,
+            }),
+          ],
+          target_model: effective.spottedfrog_veo_ref_9x16_8s_1080p,
+        },
+      ],
+    },
+    null,
+    2,
+  );
+}
+
 // 支持并且已适配通过接口获取模型列表的渠道类型
 const MODEL_FETCHABLE_TYPES = new Set([
   1, 4, 14, 34, 17, 26, 27, 24, 47, 25, 20, 23, 31, 40, 42, 48, 43,
@@ -315,6 +645,7 @@ const EditChannelModal = (props) => {
     base_url: '',
     other: '',
     model_mapping: '',
+    model_routing_rules: '',
     param_override: '',
     status_code_mapping: '',
     models: [],
@@ -523,6 +854,8 @@ const EditChannelModal = (props) => {
   const [codexCredentialRefreshing, setCodexCredentialRefreshing] =
     useState(false);
   const [paramOverrideEditorVisible, setParamOverrideEditorVisible] =
+    useState(false);
+  const [modelRoutingEditorVisible, setModelRoutingEditorVisible] =
     useState(false);
 
   // 密钥显示状态
@@ -992,6 +1325,15 @@ const EditChannelModal = (props) => {
           2,
         );
       }
+      if (data.model_routing_rules !== '') {
+        data.model_routing_rules = JSON.stringify(
+          JSON.parse(data.model_routing_rules),
+          null,
+          2,
+        );
+      } else {
+        data.model_routing_rules = '';
+      }
       const chInfo = data.channel_info || {};
       const isMulti = chInfo.is_multi_key === true;
       setIsMultiKeyChannel(isMulti);
@@ -1178,6 +1520,7 @@ const EditChannelModal = (props) => {
       // Smart expand: auto-open advanced settings if any advanced field has a value
       const hasAdvancedValues =
         (data.model_mapping && data.model_mapping.trim()) ||
+        (data.model_routing_rules && data.model_routing_rules.trim()) ||
         (data.param_override && data.param_override.trim()) ||
         (data.status_code_mapping && data.status_code_mapping.trim()) ||
         (data.header_override && data.header_override.trim()) ||
@@ -1835,6 +2178,24 @@ const EditChannelModal = (props) => {
         showInfo(t('模型映射必须是合法的 JSON 格式！'));
         return;
       }
+    }
+    if (
+      typeof localInputs.model_routing_rules === 'string' &&
+      localInputs.model_routing_rules.trim() !== '' &&
+      !verifyJSON(localInputs.model_routing_rules)
+    ) {
+      showInfo(t('视频模型路由规则必须是合法的 JSON 格式！'));
+      return;
+    }
+    if (
+      typeof localInputs.model_routing_rules === 'string' &&
+      localInputs.model_routing_rules.trim() !== ''
+    ) {
+      localInputs.model_routing_rules = JSON.stringify(
+        JSON.parse(localInputs.model_routing_rules),
+        null,
+        2,
+      );
     }
 
     const normalizedModels = (localInputs.models || [])
@@ -2533,6 +2894,67 @@ const EditChannelModal = (props) => {
                   <Text className='text-sm font-medium text-gray-500 mb-3 block'>
                     {t('请求配置')}
                   </Text>
+
+                  <div className='mb-4'>
+                    <div className='flex items-center justify-between gap-2 mb-1'>
+                      <Text className='text-sm font-medium'>
+                        {t('视频模型路由规则')}
+                      </Text>
+                      <Space>
+                        <Button
+                          size='small'
+                          type='primary'
+                          icon={<IconCode size={14} />}
+                          onClick={() => setModelRoutingEditorVisible(true)}
+                        >
+                          {t('可视化编辑')}
+                        </Button>
+                        <Button
+                          size='small'
+                          type='tertiary'
+                          onClick={() =>
+                            handleInputChange(
+                              'model_routing_rules',
+                              buildVideoModelRoutingTemplate(),
+                            )
+                          }
+                        >
+                          {t('填充模板')}
+                        </Button>
+                        {inputs.type === 59 && (
+                          <Button
+                            size='small'
+                            type='tertiary'
+                            onClick={() => {
+                              handleInputChange(
+                                'model_routing_rules',
+                                buildSpottedFrogLegacyRoutingRules(inputs),
+                              );
+                              showSuccess(t('已导入斑点蛙旧映射为新路由规则'));
+                            }}
+                          >
+                            {t('导入斑点蛙旧映射')}
+                          </Button>
+                        )}
+                      </Space>
+                    </div>
+                    <Text type='tertiary' size='small'>
+                      {t(
+                        '按下游视频请求参数匹配不同上游模型，先于旧 model_mapping 执行。',
+                      )}
+                    </Text>
+                    <Form.TextArea
+                      field='model_routing_rules'
+                      placeholder={t(
+                        '请输入 model_routing_rules JSON，或使用上方可视化编辑器',
+                      )}
+                      autosize={{ minRows: 6, maxRows: 14 }}
+                      value={inputs.model_routing_rules || ''}
+                      onChange={(value) =>
+                        handleInputChange('model_routing_rules', value)
+                      }
+                    />
+                  </div>
 
                   <div className='mb-4'>
                     <div className='flex items-center justify-between gap-2 mb-1'>
@@ -4079,6 +4501,16 @@ const EditChannelModal = (props) => {
         onSave={(nextValue) => {
           handleInputChange('param_override', nextValue);
           setParamOverrideEditorVisible(false);
+        }}
+      />
+
+      <VideoModelRoutingEditorModal
+        visible={modelRoutingEditorVisible}
+        value={inputs.model_routing_rules || ''}
+        onCancel={() => setModelRoutingEditorVisible(false)}
+        onSave={(nextValue) => {
+          handleInputChange('model_routing_rules', nextValue);
+          setModelRoutingEditorVisible(false);
         }}
       />
 

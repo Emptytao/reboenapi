@@ -40,6 +40,7 @@ type Channel struct {
 	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
 	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
 	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
+	ModelRoutingRules  *string `json:"model_routing_rules" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
 	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
@@ -506,6 +507,13 @@ func (channel *Channel) GetModelMapping() string {
 	return *channel.ModelMapping
 }
 
+func (channel *Channel) GetModelRoutingRules() string {
+	if channel.ModelRoutingRules == nil {
+		return ""
+	}
+	return *channel.ModelRoutingRules
+}
+
 func (channel *Channel) GetStatusCodeMapping() string {
 	if channel.StatusCodeMapping == nil {
 		return ""
@@ -796,7 +804,7 @@ func DisableChannelByTag(tag string) error {
 	return err
 }
 
-func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, group *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
+func EditChannelByTag(tag string, newTag *string, modelMapping *string, modelRoutingRules *string, models *string, group *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
 	updateData := Channel{}
 	shouldReCreateAbilities := false
 	updatedTag := tag
@@ -807,6 +815,9 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	}
 	if modelMapping != nil {
 		updateData.ModelMapping = modelMapping
+	}
+	if modelRoutingRules != nil {
+		updateData.ModelRoutingRules = modelRoutingRules
 	}
 	if models != nil && *models != "" {
 		shouldReCreateAbilities = true

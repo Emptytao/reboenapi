@@ -277,7 +277,7 @@ func TestApplyModelMappingUsesMappedLogicalModelAndChannelOverrides(t *testing.T
 
 func TestConvertToRequestPayload(t *testing.T) {
 	a := &TaskAdaptor{}
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "veo"}}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "firefly-veo31-ref-8s-16x9-1080p"}}
 	req := relaycommon.TaskSubmitReq{
 		Model:       "veo",
 		Prompt:      "transition",
@@ -304,7 +304,7 @@ func TestConvertToRequestPayload(t *testing.T) {
 
 func TestConvertToRequestPayloadVeoSingleReferenceUsesReferenceImages(t *testing.T) {
 	a := &TaskAdaptor{}
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "veo"}}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "firefly-veo31-ref-8s-16x9-1080p"}}
 	req := relaycommon.TaskSubmitReq{
 		Model:       "veo",
 		Prompt:      "portrait",

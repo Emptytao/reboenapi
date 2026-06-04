@@ -262,7 +262,9 @@ const SPOTTEDFROG_MODEL_MAP_SETTINGS_KEYS: Record<
 function buildSpottedFrogModelMapFormValues(
   overrides?: Partial<SpottedFrogModelMap> | null
 ): Record<SpottedFrogModelMapFieldName, string> {
-  const values = { ...SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS }
+  const values: Record<SpottedFrogModelMapFieldName, string> = {
+    ...SPOTTEDFROG_MODEL_MAP_FORM_DEFAULTS,
+  }
   if (!overrides) {
     return values
   }
@@ -278,7 +280,7 @@ function buildSpottedFrogModelMapFormValues(
   return values
 }
 
-function buildSpottedFrogModelMapOverrides(
+export function buildSpottedFrogModelMapOverrides(
   formData: ChannelFormValues
 ): Partial<SpottedFrogModelMap> | undefined {
   const overrides: Partial<SpottedFrogModelMap> = {}
@@ -323,6 +325,10 @@ export const channelFormSchema = z
         isOptionalModelMapping,
         'Model mapping must be a JSON object with string values'
       ),
+    model_routing_rules: z
+      .string()
+      .optional()
+      .refine(isOptionalJsonObject, ERROR_MESSAGES.INVALID_JSON),
     priority: z.number().optional(),
     weight: z.number().optional(),
     test_model: z.string().optional(),
@@ -464,6 +470,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   models: '',
   group: ['default'],
   model_mapping: '',
+  model_routing_rules: '',
   priority: 0,
   weight: 0,
   test_model: '',
@@ -604,6 +611,7 @@ export function transformChannelToFormDefaults(
     models: channel.models || '',
     group: parseGroups(channel.group || 'default'),
     model_mapping: channel.model_mapping || '',
+    model_routing_rules: channel.model_routing_rules || '',
     priority: channel.priority || 0,
     weight: channel.weight || 0,
     test_model: channel.test_model || '',
@@ -803,6 +811,7 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     models: formData.models,
     group: formatGroups(formData.group),
     model_mapping: formData.model_mapping || null,
+    model_routing_rules: formData.model_routing_rules || null,
     priority: formData.priority || null,
     weight: formData.weight || null,
     test_model: formData.test_model || null,
@@ -851,6 +860,7 @@ export function transformFormDataToUpdatePayload(
     models: formData.models,
     group: formatGroups(formData.group),
     model_mapping: formData.model_mapping || null,
+    model_routing_rules: formData.model_routing_rules || null,
     priority: formData.priority ?? 0,
     weight: formData.weight ?? 0,
     test_model: formData.test_model || null,
@@ -885,6 +895,7 @@ export function transformFormDataToUpdatePayload(
   payload.tag = formData.tag || ''
   payload.remark = formData.remark || ''
   payload.model_mapping = formData.model_mapping || ''
+  payload.model_routing_rules = formData.model_routing_rules || ''
   payload.status_code_mapping = formData.status_code_mapping || ''
   payload.param_override = formData.param_override || ''
   payload.header_override = formData.header_override || ''
