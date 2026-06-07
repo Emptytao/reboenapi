@@ -2,10 +2,15 @@ package spottedfrog
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +27,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 )
+
+const spottedFrogRequestContentTypeKey = "spottedfrog_request_content_type"
 
 type requestPayload struct {
 	Model           string         `json:"model"`
@@ -49,6 +56,7 @@ type metadataPayload struct {
 	Resolution      string   `json:"resolution,omitempty"`
 	AspectRatio     string   `json:"aspect_ratio,omitempty"`
 	Ratio           string   `json:"ratio,omitempty"`
+	Audio           *bool    `json:"audio,omitempty"`
 	ReferenceMode   string   `json:"reference_mode,omitempty"`
 	ReferenceImages []string `json:"reference_images,omitempty"`
 	Image           string   `json:"image,omitempty"`
@@ -78,6 +86,21 @@ type responsePayload struct {
 	CompletedAt int64    `json:"completed_at,omitempty"`
 }
 
+type omniJSONRequestPayload struct {
+	Model          string `json:"model"`
+	Prompt         string `json:"prompt,omitempty"`
+	Size           string `json:"size,omitempty"`
+	Seconds        string `json:"seconds,omitempty"`
+	InputReference string `json:"input_reference,omitempty"`
+	GenerateAudio  *bool  `json:"generate_audio,omitempty"`
+}
+
+type omniInputFile struct {
+	Filename    string
+	ContentType string
+	Data        []byte
+}
+
 type TaskAdaptor struct {
 	taskcommon.BaseBilling
 	ChannelType int
@@ -101,13 +124,19 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	}
 	var meta metadataPayload
 	_ = taskcommon.UnmarshalMetadata(req.Metadata, &meta)
-	images := normalizedImages(&req, meta)
+	imagesCount := len(normalizedImages(&req, meta))
+	if imagesCount == 0 {
+		imagesCount = countMultipartReferenceFiles(c)
+	}
+	if isOmniFlashRequest(&req, info) && imagesCount > 7 {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("omni_flash supports at most 7 reference images"), "invalid_request", http.StatusBadRequest)
+	}
 	switch {
-	case len(images) == 0:
+	case imagesCount == 0:
 		info.Action = constant.TaskActionTextGenerate
-	case len(images) == 2:
+	case imagesCount == 2:
 		info.Action = constant.TaskActionFirstTailGenerate
-	case len(images) > 2:
+	case imagesCount > 2:
 		info.Action = constant.TaskActionReferenceGenerate
 	default:
 		info.Action = constant.TaskActionGenerate
@@ -120,10 +149,22 @@ func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) 
 	return normalizeBaseURL(a.baseURL) + "/v1" + videosEndpoint + "?async=true", nil
 }
 
-func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
-	req.Header.Set("Content-Type", "application/json")
+func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
+	contentType := "application/json"
+	if c != nil {
+		if value, exists := c.Get(spottedFrogRequestContentTypeKey); exists {
+			if contentTypeStr, ok := value.(string); ok && strings.TrimSpace(contentTypeStr) != "" {
+				contentType = strings.TrimSpace(contentTypeStr)
+			}
+		}
+	}
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
+	req.Header.Set("Prefer", "respond-async")
 	return nil
 }
 
@@ -131,6 +172,9 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil, err
+	}
+	if isOmniFlashRequest(&req, info) {
+		return a.buildOmniRequestBody(c, &req, info)
 	}
 	body, err := a.convertToRequestPayload(&req, info)
 	if err != nil {
@@ -140,6 +184,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
+	setSpottedFrogRequestContentType(c, "application/json")
 	return bytes.NewReader(data), nil
 }
 
@@ -186,7 +231,22 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 	if !ok || taskID == "" {
 		return nil, fmt.Errorf("invalid task_id")
 	}
+	asyncURI := fmt.Sprintf("%s/v1%s/%s?async=true", normalizeBaseURL(baseURL), videosEndpoint, url.PathEscape(taskID))
+	resp, err := doSpottedFrogFetchTask(asyncURI, key, proxy)
+	if err != nil {
+		return nil, err
+	}
+	if resp != nil && resp.StatusCode < http.StatusBadRequest {
+		return resp, nil
+	}
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	uri := fmt.Sprintf("%s/v1%s/%s", normalizeBaseURL(baseURL), videosEndpoint, url.PathEscape(taskID))
+	return doSpottedFrogFetchTask(uri, key, proxy)
+}
+
+func doSpottedFrogFetchTask(uri, key, proxy string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
@@ -257,6 +317,77 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		body.InputReference = req.InputReference
 	}
 	return body, nil
+}
+
+func (a *TaskAdaptor) buildOmniRequestBody(c *gin.Context, req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (io.Reader, error) {
+	var meta metadataPayload
+	if err := taskcommon.UnmarshalMetadata(req.Metadata, &meta); err != nil {
+		return nil, errors.Wrap(err, "unmarshal metadata failed")
+	}
+	files, err := collectOmniInputFiles(c, req, meta)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) > 7 {
+		return nil, fmt.Errorf("omni_flash supports at most 7 reference images")
+	}
+
+	modelName := taskcommon.DefaultString(info.UpstreamModelName, req.Model)
+	if strings.EqualFold(strings.TrimSpace(modelName), "omni") {
+		modelName = "omni_flash"
+	}
+	size := omniSize(req.Size, meta)
+	seconds := omniSeconds(req)
+	generateAudio := omniGenerateAudio(meta)
+
+	if len(files) == 0 {
+		body := omniJSONRequestPayload{
+			Model:          modelName,
+			Prompt:         req.Prompt,
+			Size:           size,
+			Seconds:        seconds,
+			InputReference: "[]",
+		}
+		if generateAudio {
+			body.GenerateAudio = boolPtr(true)
+		}
+		data, err := common.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		setSpottedFrogRequestContentType(c, "application/json")
+		return bytes.NewReader(data), nil
+	}
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	if err := writer.WriteField("model", modelName); err != nil {
+		return nil, err
+	}
+	if err := writer.WriteField("prompt", req.Prompt); err != nil {
+		return nil, err
+	}
+	if err := writer.WriteField("size", size); err != nil {
+		return nil, err
+	}
+	if err := writer.WriteField("seconds", seconds); err != nil {
+		return nil, err
+	}
+	if generateAudio {
+		if err := writer.WriteField("generate_audio", "true"); err != nil {
+			return nil, err
+		}
+	}
+	for idx, file := range files {
+		if err := writeOmniMultipartFile(writer, idx, file); err != nil {
+			return nil, err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	setSpottedFrogRequestContentType(c, writer.FormDataContentType())
+	return &buf, nil
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
@@ -486,6 +617,299 @@ func normalizedImages(req *relaycommon.TaskSubmitReq, meta metadataPayload) []st
 		images = append(images, strings.TrimSpace(req.InputReference))
 	}
 	return images
+}
+
+func countMultipartReferenceFiles(c *gin.Context) int {
+	files, err := collectMultipartReferenceFiles(c)
+	if err != nil {
+		return 0
+	}
+	return len(files)
+}
+
+func collectMultipartReferenceFiles(c *gin.Context) ([]omniInputFile, error) {
+	if c == nil || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.GetHeader("Content-Type"))), "multipart/form-data") {
+		return nil, nil
+	}
+	form := c.Request.MultipartForm
+	if form == nil {
+		var err error
+		form, err = common.ParseMultipartFormReusable(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+	fieldNames := []string{"input_reference[]", "input_reference", "images", "image"}
+	var files []omniInputFile
+	for _, fieldName := range fieldNames {
+		fileHeaders := form.File[fieldName]
+		for _, fileHeader := range fileHeaders {
+			file, err := fileHeader.Open()
+			if err != nil {
+				return nil, err
+			}
+			data, err := io.ReadAll(file)
+			_ = file.Close()
+			if err != nil {
+				return nil, err
+			}
+			contentType := normalizeContentType(fileHeader.Header.Get("Content-Type"))
+			if contentType == "" || contentType == "application/octet-stream" {
+				contentType = http.DetectContentType(data)
+			}
+			filename := strings.TrimSpace(fileHeader.Filename)
+			if filename == "" {
+				filename = omniGeneratedFilename(len(files)+1, contentType)
+			}
+			files = append(files, omniInputFile{
+				Filename:    filename,
+				ContentType: contentType,
+				Data:        data,
+			})
+		}
+	}
+	return files, nil
+}
+
+func collectOmniInputFiles(c *gin.Context, req *relaycommon.TaskSubmitReq, meta metadataPayload) ([]omniInputFile, error) {
+	files, err := collectMultipartReferenceFiles(c)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) > 0 {
+		return files, nil
+	}
+
+	refs := normalizedOmniImageRefs(req, meta)
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	files = make([]omniInputFile, 0, len(refs))
+	for idx, ref := range refs {
+		file, err := omniInputFileFromString(ref, idx+1)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	return files, nil
+}
+
+func normalizedOmniImageRefs(req *relaycommon.TaskSubmitReq, meta metadataPayload) []string {
+	refs := make([]string, 0, len(req.Images)+len(meta.ReferenceImages)+len(meta.Images)+2)
+	appendRef := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		refs = append(refs, value)
+	}
+	appendRefs := func(values []string) {
+		for _, value := range values {
+			appendRef(value)
+		}
+	}
+
+	appendRefs(req.Images)
+	appendRef(req.Image)
+	appendRefs(meta.ReferenceImages)
+	appendRefs(meta.Images)
+	appendRef(meta.Image)
+	appendRefs(parseInputReferenceValues(req.InputReference))
+
+	return refs
+}
+
+func parseInputReferenceValues(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "[]" {
+		return nil
+	}
+	if strings.HasPrefix(raw, "[") {
+		var values []string
+		if err := common.UnmarshalJsonStr(raw, &values); err == nil {
+			result := make([]string, 0, len(values))
+			for _, value := range values {
+				value = strings.TrimSpace(value)
+				if value != "" {
+					result = append(result, value)
+				}
+			}
+			return result
+		}
+	}
+	return []string{raw}
+}
+
+func omniInputFileFromString(raw string, index int) (omniInputFile, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return omniInputFile{}, fmt.Errorf("empty omni input reference")
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return omniInputFileFromURL(raw, index)
+	}
+	return omniInputFileFromBase64(raw, index)
+}
+
+func omniInputFileFromURL(rawURL string, index int) (omniInputFile, error) {
+	resp, err := service.DoDownloadRequest(rawURL, "spottedfrog_omni_input_reference")
+	if err != nil {
+		return omniInputFile{}, fmt.Errorf("download omni input reference failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return omniInputFile{}, fmt.Errorf("download omni input reference failed: http %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return omniInputFile{}, err
+	}
+	contentType := normalizeContentType(resp.Header.Get("Content-Type"))
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = http.DetectContentType(data)
+	}
+	filename := omniFilenameFromURL(rawURL, index, contentType)
+	return omniInputFile{
+		Filename:    filename,
+		ContentType: contentType,
+		Data:        data,
+	}, nil
+}
+
+func omniInputFileFromBase64(raw string, index int) (omniInputFile, error) {
+	contentType, cleanBase64, err := service.DecodeBase64FileData(raw)
+	if err != nil {
+		return omniInputFile{}, fmt.Errorf("decode omni input reference failed: %w", err)
+	}
+	data, err := base64.StdEncoding.DecodeString(cleanBase64)
+	if err != nil {
+		return omniInputFile{}, fmt.Errorf("decode omni input reference bytes failed: %w", err)
+	}
+	contentType = normalizeContentType(contentType)
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = http.DetectContentType(data)
+	}
+	return omniInputFile{
+		Filename:    omniGeneratedFilename(index, contentType),
+		ContentType: contentType,
+		Data:        data,
+	}, nil
+}
+
+func writeOmniMultipartFile(writer *multipart.Writer, index int, file omniInputFile) error {
+	contentType := normalizeContentType(file.ContentType)
+	if contentType == "" {
+		contentType = http.DetectContentType(file.Data)
+	}
+	filename := strings.TrimSpace(file.Filename)
+	if filename == "" {
+		filename = omniGeneratedFilename(index+1, contentType)
+	}
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, "input_reference[]", filename))
+	header.Set("Content-Type", contentType)
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		return err
+	}
+	_, err = part.Write(file.Data)
+	return err
+}
+
+func omniGenerateAudio(meta metadataPayload) bool {
+	if meta.GenerateAudio != nil {
+		return *meta.GenerateAudio
+	}
+	if meta.Audio != nil {
+		return *meta.Audio
+	}
+	return false
+}
+
+func omniSeconds(req *relaycommon.TaskSubmitReq) string {
+	if strings.TrimSpace(req.Seconds) != "" {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(req.Seconds)); err == nil {
+			if parsed >= 10 {
+				return "10"
+			}
+			return "8"
+		}
+	}
+	if req.Duration >= 10 {
+		return "10"
+	}
+	return "8"
+}
+
+func omniSize(size string, meta metadataPayload) string {
+	switch requestAspectRatio(size, meta) {
+	case "9:16":
+		return "1080x1920"
+	case "1:1":
+		return "1080x1080"
+	default:
+		return "1920x1080"
+	}
+}
+
+func isOmniFlashRequest(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) bool {
+	candidates := []string{}
+	if info != nil {
+		candidates = append(candidates, info.UpstreamModelName, info.OriginModelName)
+	}
+	if req != nil {
+		candidates = append(candidates, req.Model)
+	}
+	for _, candidate := range candidates {
+		switch normalizeVideoModelName(candidate) {
+		case "omni", "omni_flash":
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeVideoModelName(modelName string) string {
+	return strings.ToLower(strings.TrimSpace(modelName))
+}
+
+func setSpottedFrogRequestContentType(c *gin.Context, contentType string) {
+	if c == nil {
+		return
+	}
+	c.Set(spottedFrogRequestContentTypeKey, contentType)
+}
+
+func normalizeContentType(contentType string) string {
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	if err != nil {
+		return strings.TrimSpace(contentType)
+	}
+	return mediaType
+}
+
+func omniFilenameFromURL(rawURL string, index int, contentType string) string {
+	parsed, err := url.Parse(rawURL)
+	if err == nil {
+		base := strings.TrimSpace(path.Base(parsed.Path))
+		if base != "" && base != "." && base != "/" {
+			return base
+		}
+	}
+	return omniGeneratedFilename(index, contentType)
+}
+
+func omniGeneratedFilename(index int, contentType string) string {
+	ext := ".bin"
+	if exts, err := mime.ExtensionsByType(normalizeContentType(contentType)); err == nil && len(exts) > 0 {
+		ext = exts[0]
+	}
+	return fmt.Sprintf("input_reference_%d%s", index, ext)
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func requestDuration(req *relaycommon.TaskSubmitReq) (int, bool) {

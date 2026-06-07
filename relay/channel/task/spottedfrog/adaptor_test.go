@@ -1,16 +1,21 @@
 package spottedfrog
 
 import (
+	"bytes"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -325,6 +330,286 @@ func TestConvertToRequestPayloadVeoSingleReferenceUsesReferenceImages(t *testing
 	}
 	if got.Image != "" {
 		t.Fatalf("Image = %q", got.Image)
+	}
+}
+
+func TestBuildOmniTextRequestBodyJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	req := relaycommon.TaskSubmitReq{
+		Model:       "omni_flash",
+		Prompt:      "提示词",
+		Size:        "1280x720",
+		Duration:    4,
+		DurationSet: true,
+		Metadata: map[string]interface{}{
+			"aspect_ratio":   "16:9",
+			"generate_audio": false,
+		},
+	}
+	c.Set("task_request", req)
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:   &relaycommon.ChannelMeta{UpstreamModelName: "omni_flash"},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	a := &TaskAdaptor{}
+
+	bodyReader, err := a.BuildRequestBody(c, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyBytes, err := io.ReadAll(bodyReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload map[string]any
+	if err := common.Unmarshal(bodyBytes, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["model"] != "omni_flash" {
+		t.Fatalf("model = %#v", payload["model"])
+	}
+	if payload["size"] != "1920x1080" {
+		t.Fatalf("size = %#v", payload["size"])
+	}
+	if payload["seconds"] != "8" {
+		t.Fatalf("seconds = %#v", payload["seconds"])
+	}
+	if payload["input_reference"] != "[]" {
+		t.Fatalf("input_reference = %#v", payload["input_reference"])
+	}
+	for _, unexpected := range []string{"generate_audio", "duration", "aspect_ratio", "metadata", "reference_images", "reference_mode"} {
+		if _, exists := payload[unexpected]; exists {
+			t.Fatalf("unexpected field %q in payload: %#v", unexpected, payload[unexpected])
+		}
+	}
+
+	upstreamReq, err := http.NewRequest(http.MethodPost, "https://api.hellobabygo.com/v1/videos?async=true", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.BuildRequestHeader(c, upstreamReq, info); err != nil {
+		t.Fatal(err)
+	}
+	if got := upstreamReq.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	if got := upstreamReq.Header.Get("Prefer"); got != "respond-async" {
+		t.Fatalf("Prefer = %q", got)
+	}
+}
+
+func TestBuildOmniTextRequestBodyIncludesGenerateAudioWhenEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	req := relaycommon.TaskSubmitReq{
+		Model:    "omni_flash",
+		Prompt:   "带音频",
+		Size:     "1080x1920",
+		Seconds:  "10",
+		Metadata: map[string]interface{}{"audio": true},
+	}
+	c.Set("task_request", req)
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:   &relaycommon.ChannelMeta{UpstreamModelName: "omni_flash"},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	a := &TaskAdaptor{}
+
+	bodyReader, err := a.BuildRequestBody(c, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyBytes, err := io.ReadAll(bodyReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload map[string]any
+	if err := common.Unmarshal(bodyBytes, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["size"] != "1080x1920" {
+		t.Fatalf("size = %#v", payload["size"])
+	}
+	if payload["seconds"] != "10" {
+		t.Fatalf("seconds = %#v", payload["seconds"])
+	}
+	if payload["generate_audio"] != true {
+		t.Fatalf("generate_audio = %#v", payload["generate_audio"])
+	}
+}
+
+func TestBuildOmniMultipartRequestBodyFromDataURI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	req := relaycommon.TaskSubmitReq{
+		Model:   "omni_flash",
+		Prompt:  "图生视频",
+		Size:    "720x1280",
+		Seconds: "10",
+		Images: []string{
+			"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+		},
+		Metadata: map[string]interface{}{"generate_audio": false},
+	}
+	c.Set("task_request", req)
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:   &relaycommon.ChannelMeta{UpstreamModelName: "omni_flash"},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	a := &TaskAdaptor{}
+
+	bodyReader, err := a.BuildRequestBody(c, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyBytes, err := io.ReadAll(bodyReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	upstreamReq, err := http.NewRequest(http.MethodPost, "https://api.hellobabygo.com/v1/videos?async=true", bytes.NewReader(bodyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.BuildRequestHeader(c, upstreamReq, info); err != nil {
+		t.Fatal(err)
+	}
+	contentType := upstreamReq.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "multipart/form-data;") {
+		t.Fatalf("Content-Type = %q", contentType)
+	}
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mediaType != "multipart/form-data" {
+		t.Fatalf("media type = %q", mediaType)
+	}
+	reader := multipart.NewReader(bytes.NewReader(bodyBytes), params["boundary"])
+	fields := map[string][]string{}
+	files := map[string]int{}
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if part.FileName() != "" {
+			files[part.FormName()]++
+			if part.FormName() != "input_reference[]" {
+				t.Fatalf("unexpected file field %q", part.FormName())
+			}
+			if normalizeContentType(part.Header.Get("Content-Type")) != "image/png" {
+				t.Fatalf("file content type = %q", part.Header.Get("Content-Type"))
+			}
+			if len(data) == 0 {
+				t.Fatal("multipart file body is empty")
+			}
+			continue
+		}
+		fields[part.FormName()] = append(fields[part.FormName()], string(data))
+	}
+	if fields["model"][0] != "omni_flash" {
+		t.Fatalf("model field = %#v", fields["model"])
+	}
+	if fields["size"][0] != "1080x1920" {
+		t.Fatalf("size field = %#v", fields["size"])
+	}
+	if fields["seconds"][0] != "10" {
+		t.Fatalf("seconds field = %#v", fields["seconds"])
+	}
+	if _, exists := fields["generate_audio"]; exists {
+		t.Fatalf("generate_audio should be omitted when false: %#v", fields["generate_audio"])
+	}
+	if files["input_reference[]"] != 1 {
+		t.Fatalf("input_reference[] file count = %d", files["input_reference[]"])
+	}
+}
+
+func TestValidateRequestAndSetActionCountsMultipartFilesForOmni(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("model", "omni_flash")
+	_ = writer.WriteField("prompt", "multipart")
+	_ = writer.WriteField("size", "1920x1080")
+	_ = writer.WriteField("seconds", "8")
+	part1, _ := writer.CreateFormFile("input_reference[]", "first.png")
+	_, _ = part1.Write([]byte("first-image"))
+	part2, _ := writer.CreateFormFile("input_reference[]", "last.png")
+	_, _ = part2.Write([]byte("last-image"))
+	_ = writer.Close()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(body.Bytes()))
+	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:   &relaycommon.ChannelMeta{UpstreamModelName: "omni_flash"},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	a := &TaskAdaptor{}
+	if taskErr := a.ValidateRequestAndSetAction(c, info); taskErr != nil {
+		t.Fatalf("task error: %s", taskErr.Message)
+	}
+	if info.Action != constant.TaskActionFirstTailGenerate {
+		t.Fatalf("action = %q", info.Action)
+	}
+}
+
+func TestFetchTaskUsesAsyncQueryThenFallback(t *testing.T) {
+	service.InitHttpClient()
+	callPaths := make([]string, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callPaths = append(callPaths, r.URL.RequestURI())
+		if strings.Contains(r.URL.RawQuery, "async=true") {
+			http.Error(w, "try fallback", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"frog-task-1","status":"queued"}`))
+	}))
+	defer server.Close()
+
+	a := &TaskAdaptor{}
+	resp, err := a.FetchTask(server.URL, "sk-test", map[string]any{"task_id": "frog-task-1"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if len(callPaths) != 2 {
+		t.Fatalf("call paths = %#v", callPaths)
+	}
+	if callPaths[0] != "/v1/videos/frog-task-1?async=true" {
+		t.Fatalf("first call path = %q", callPaths[0])
+	}
+	if callPaths[1] != "/v1/videos/frog-task-1" {
+		t.Fatalf("second call path = %q", callPaths[1])
 	}
 }
 
