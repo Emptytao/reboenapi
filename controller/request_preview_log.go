@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 )
@@ -54,4 +56,22 @@ func GetUserRequestPreviewLogs(c *gin.Context) {
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
 	common.ApiSuccess(c, pageInfo)
+}
+
+func GetRequestPreviewLog(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.ApiError(c, errors.New("invalid request preview log id"))
+		return
+	}
+	log, err := model.GetRequestPreviewLogByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ApiError(c, errors.New("request preview log not found"))
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, log)
 }

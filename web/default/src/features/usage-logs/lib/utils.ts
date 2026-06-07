@@ -25,7 +25,6 @@ import {
   getAllMidjourneyLogs,
   getAllRequestPreviewLogs,
   getUserMidjourneyLogs,
-  getUserRequestPreviewLogs,
   getAllTaskLogs,
   getUserTaskLogs,
 } from '../api'
@@ -303,15 +302,24 @@ export async function fetchLogsByCategory(
   }
 
   if (logCategory === 'preview') {
+    if (!isAdmin) {
+      return {
+        success: true,
+        data: {
+          items: [],
+          total: 0,
+          page,
+          page_size: pageSize,
+        },
+      }
+    }
     const params = buildPreviewApiParams({
       page,
       pageSize,
       searchParams,
       isAdmin,
     })
-    return isAdmin
-      ? await getAllRequestPreviewLogs(params)
-      : await getUserRequestPreviewLogs(params)
+    return await getAllRequestPreviewLogs(params)
   }
 
   // For drawing and task logs

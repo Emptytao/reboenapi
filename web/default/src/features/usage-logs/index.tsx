@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
+import { useIsAdmin } from '@/hooks/use-admin'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import type { NavGroup } from '@/components/layout/types'
@@ -56,6 +57,7 @@ const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
 function UsageLogsContent() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const isAdmin = useIsAdmin()
   const params = route.useParams()
   const activeCategory: UsageLogsSectionId =
     params.section && isUsageLogsSectionId(params.section)
@@ -73,7 +75,10 @@ function UsageLogsContent() {
     () => [
       {
         title: 'Logs',
-        items: (['common', 'drawing', 'task', 'preview'] as const).map(
+        items: (isAdmin
+          ? (['common', 'drawing', 'task', 'preview'] as const)
+          : (['common', 'drawing', 'task'] as const)
+        ).map(
           (section) => ({
           title: SECTION_META[section].titleKey,
           url: `/usage-logs/${section}`,
@@ -81,7 +86,7 @@ function UsageLogsContent() {
         ),
       },
     ],
-    []
+    [isAdmin]
   )
   const filteredTabGroups = useSidebarConfig(tabNavGroups)
   const visibleSections = useMemo(
@@ -99,7 +104,12 @@ function UsageLogsContent() {
   const availableSections =
     visibleSections.length > 0
       ? visibleSections
-      : (['common', 'drawing', 'task', 'preview'] as UsageLogsSectionId[])
+      : (isAdmin
+          ? (['common', 'drawing', 'task', 'preview'] as UsageLogsSectionId[])
+          : (['common', 'drawing', 'task'] as UsageLogsSectionId[]))
+  const currentSection = availableSections.includes(activeCategory)
+    ? activeCategory
+    : availableSections[0] || USAGE_LOGS_DEFAULT_SECTION
 
   useEffect(() => {
     if (
@@ -134,7 +144,7 @@ function UsageLogsContent() {
         <SectionPageLayout.Content>
           <div className='space-y-4'>
             {showSectionTabs && (
-              <Tabs value={activeCategory} onValueChange={handleSectionChange}>
+              <Tabs value={currentSection} onValueChange={handleSectionChange}>
                 <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
                   {availableSections.map((section) => (
                     <TabsTrigger key={section} value={section}>
@@ -144,7 +154,7 @@ function UsageLogsContent() {
                 </TabsList>
               </Tabs>
             )}
-            <UsageLogsTable logCategory={activeCategory} />
+            <UsageLogsTable logCategory={currentSection} />
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

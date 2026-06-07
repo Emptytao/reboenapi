@@ -25,6 +25,7 @@ func TestRelayTaskSubmitPreviewModeSkipsTaskCreationFlow(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewBufferString(`{"model":"seedance-2-official","prompt":"hello world","size":"1280x720","duration":8}`))
 	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("role", appcommon.RoleAdminUser)
 
 	appcommon.SetContextKey(ctx, constant.ContextKeyChannelType, constant.ChannelTypeHKCOPP)
 	appcommon.SetContextKey(ctx, constant.ContextKeyChannelId, 58)

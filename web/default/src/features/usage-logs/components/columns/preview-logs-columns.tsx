@@ -17,11 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Eye, Route } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatTimestampToDate } from '@/lib/format'
+import { api } from '@/lib/api'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/copy-button'
@@ -37,6 +38,123 @@ import { useUsageLogsContext } from '../usage-logs-provider'
 import type { PreviewLog } from '../../types'
 import { createChannelColumn } from './column-helpers'
 
+type PreviewBodyPayload = {
+  content_type?: string
+  size?: number
+  kind?: string
+  json?: unknown
+  text?: string
+  summary?: string
+}
+
+type PreviewRequestPayload = {
+  method?: string
+  path?: string
+  query?: Record<string, string[]>
+  url?: string
+  headers?: Record<string, string>
+  body?: PreviewBodyPayload
+}
+
+type ChannelPreviewResponse = {
+  object?: string
+  channel?: {
+    id?: number
+    type?: number
+    base_url?: string
+    origin_model?: string
+    upstream_model?: string
+    request_preview_mode_enabled?: boolean
+  }
+  relay?: {
+    request_path?: string
+    relay_mode?: string
+    client_requested_stream?: boolean
+    response_mode?: string
+    request_conversion_chain?: string[]
+    final_request_relay_format?: string
+  }
+  downstream_request?: PreviewRequestPayload
+  upstream_request?: PreviewRequestPayload
+}
+
+function parsePreviewPayload(payload: string): ChannelPreviewResponse | null {
+  try {
+    const parsed = JSON.parse(payload) as ChannelPreviewResponse
+    if (parsed?.object === 'channel_request_preview') {
+      return parsed
+    }
+  } catch {}
+  return null
+}
+
+function stringifyPreviewValue(value: unknown): string {
+  if (value === undefined || value === null || value === '') return '-'
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function getPreviewBodyContent(body?: PreviewBodyPayload): string {
+  if (!body) return '-'
+  if (body.kind === 'json') return stringifyPreviewValue(body.json)
+  if (body.kind === 'text') return body.text || '-'
+  if (body.kind === 'summary') return body.summary || '-'
+  return '-'
+}
+
+function PreviewInfoBlock({
+  label,
+  value,
+}: {
+  label: string
+  value: unknown
+}) {
+  const displayValue = stringifyPreviewValue(value)
+  const multiline = displayValue.includes('\n') || displayValue.length > 80
+
+  return (
+    <div className='rounded-lg border bg-muted/20 p-3'>
+      <div className='text-muted-foreground mb-1 text-[11px] font-medium uppercase tracking-wide'>
+        {label}
+      </div>
+      {multiline ? (
+        <pre className='overflow-x-auto whitespace-pre-wrap break-all text-xs leading-5'>
+          {displayValue}
+        </pre>
+      ) : (
+        <div className='font-mono text-xs'>{displayValue}</div>
+      )}
+    </div>
+  )
+}
+
+function PreviewPacketPanel({
+  title,
+  packet,
+}: {
+  title: string
+  packet?: PreviewRequestPayload
+}) {
+  return (
+    <div className='space-y-3 rounded-xl border p-4'>
+      <div className='text-sm font-semibold'>{title}</div>
+      <PreviewInfoBlock label='Method' value={packet?.method || '-'} />
+      {packet?.path ? <PreviewInfoBlock label='Path' value={packet.path} /> : null}
+      {packet?.url ? <PreviewInfoBlock label='URL' value={packet.url} /> : null}
+      <PreviewInfoBlock label='Query' value={packet?.query || {}} />
+      <PreviewInfoBlock label='Headers' value={packet?.headers || {}} />
+      <PreviewInfoBlock
+        label={`Body (${packet?.body?.kind || 'empty'} / ${packet?.body?.content_type || '-'})`}
+        value={getPreviewBodyContent(packet?.body)}
+      />
+    </div>
+  )
+}
+
 function PreviewPayloadDialog({
   open,
   onOpenChange,
@@ -47,13 +165,45 @@ function PreviewPayloadDialog({
   log: PreviewLog
 }) {
   const { t } = useTranslation()
-  const formatted = useMemo(() => {
-    try {
-      return JSON.stringify(JSON.parse(log.payload), null, 2)
-    } catch {
-      return log.payload
+  const [payload, setPayload] = useState(log.payload || '')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setPayload(log.payload || '')
+  }, [log.id, log.payload])
+
+  useEffect(() => {
+    if (!open) return
+    if (payload) return
+
+    let cancelled = false
+    const fetchPayload = async () => {
+      setLoading(true)
+      try {
+        const res = await api.get(`/api/preview-log/${log.id}`)
+        if (!cancelled && res.data?.success) {
+          setPayload(res.data.data?.payload || '')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
     }
-  }, [log.payload])
+
+    void fetchPayload()
+    return () => {
+      cancelled = true
+    }
+  }, [log.id, open, payload])
+
+  const parsed = useMemo(() => parsePreviewPayload(payload), [payload])
+  const formatted = useMemo(() => {
+    if (parsed) {
+      return JSON.stringify(parsed, null, 2)
+    }
+    return payload
+  }, [parsed, payload])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -62,12 +212,92 @@ function PreviewPayloadDialog({
           <DialogTitle>{t('Request Preview Details')}</DialogTitle>
         </DialogHeader>
         <ScrollArea className='max-h-[70vh] rounded-md border'>
-          <pre className='overflow-x-auto p-4 text-xs leading-5 whitespace-pre-wrap break-all'>
-            {formatted}
-          </pre>
+          {loading ? (
+            <div className='text-muted-foreground flex items-center justify-center py-12 text-sm'>
+              {t('Loading...')}
+            </div>
+          ) : parsed ? (
+            <div className='space-y-4 p-4'>
+              <div className='space-y-3 rounded-xl border p-4'>
+                <div className='text-sm font-semibold'>{t('Request Info')}</div>
+                <div className='grid gap-3 md:grid-cols-2'>
+                  <PreviewInfoBlock label='Channel ID' value={parsed.channel?.id ?? '-'} />
+                  <PreviewInfoBlock label='Channel Type' value={parsed.channel?.type ?? '-'} />
+                  <PreviewInfoBlock label='Base URL' value={parsed.channel?.base_url || '-'} />
+                  <PreviewInfoBlock label='Request Path' value={parsed.relay?.request_path || '-'} />
+                  <PreviewInfoBlock label='Relay Mode' value={parsed.relay?.relay_mode || '-'} />
+                  <PreviewInfoBlock label='Origin Model' value={parsed.channel?.origin_model || '-'} />
+                  <PreviewInfoBlock label='Upstream Model' value={parsed.channel?.upstream_model || '-'} />
+                  <PreviewInfoBlock
+                    label='Client Requested Stream'
+                    value={parsed.relay?.client_requested_stream ? 'true' : 'false'}
+                  />
+                  <PreviewInfoBlock label='Response Mode' value={parsed.relay?.response_mode || '-'} />
+                  <PreviewInfoBlock
+                    label='Request Conversion Chain'
+                    value={parsed.relay?.request_conversion_chain || []}
+                  />
+                  <PreviewInfoBlock
+                    label='Final Request Relay Format'
+                    value={parsed.relay?.final_request_relay_format || '-'}
+                  />
+                </div>
+              </div>
+              <div className='grid gap-4 xl:grid-cols-2'>
+                <PreviewPacketPanel
+                  title={t('Downstream Request')}
+                  packet={parsed.downstream_request}
+                />
+                <PreviewPacketPanel
+                  title={t('Upstream Request')}
+                  packet={parsed.upstream_request}
+                />
+              </div>
+              <div className='rounded-xl border p-4'>
+                <div className='mb-2 text-sm font-semibold'>{t('Raw Payload')}</div>
+                <pre className='overflow-x-auto whitespace-pre-wrap break-all text-xs leading-5'>
+                  {formatted}
+                </pre>
+              </div>
+            </div>
+          ) : (
+            <pre className='overflow-x-auto p-4 text-xs leading-5 whitespace-pre-wrap break-all'>
+              {formatted || '-'}
+            </pre>
+          )}
         </ScrollArea>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function PreviewActionCell({ log }: { log: PreviewLog }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      <div className='flex items-center gap-1'>
+        <Button
+          variant='outline'
+          size='sm'
+          className='h-7 gap-1 px-2 text-xs'
+          onClick={() => setOpen(true)}
+        >
+          <Eye className='size-3.5' />
+          {t('View')}
+        </Button>
+        {log.payload ? (
+          <CopyButton
+            value={log.payload}
+            variant='ghost'
+            size='icon'
+            className='size-7'
+          />
+        ) : null}
+      </div>
+      <PreviewPayloadDialog open={open} onOpenChange={setOpen} log={log} />
+    </>
   )
 }
 
@@ -245,32 +475,7 @@ export function usePreviewLogsColumns(
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title={t('Preview')} />
       ),
-      cell: ({ row }) => {
-        const log = row.original
-        const [open, setOpen] = useState(false)
-        return (
-          <>
-            <div className='flex items-center gap-1'>
-              <Button
-                variant='outline'
-                size='sm'
-                className='h-7 gap-1 px-2 text-xs'
-                onClick={() => setOpen(true)}
-              >
-                <Eye className='size-3.5' />
-                {t('View')}
-              </Button>
-              <CopyButton
-                value={log.payload}
-                variant='ghost'
-                size='icon'
-                className='size-7'
-              />
-            </div>
-            <PreviewPayloadDialog open={open} onOpenChange={setOpen} log={log} />
-          </>
-        )
-      },
+      cell: ({ row }) => <PreviewActionCell log={row.original} />,
       meta: { label: t('Preview') },
     }
   )

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	appcommon "github.com/QuantumNous/new-api/common"
@@ -72,6 +73,7 @@ func TestTryWritePreviewFromAdaptorMasksSensitiveHeaders(t *testing.T) {
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions?foo=bar", bytes.NewBufferString(`{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}`))
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Request.Header.Set("Authorization", "Bearer downstream-secret")
+	ctx.Set("role", appcommon.RoleAdminUser)
 
 	info := &relaycommon.RelayInfo{
 		RelayMode:             relayconstant.RelayModeChatCompletions,
@@ -116,12 +118,12 @@ func TestTryWritePreviewFromAdaptorMasksSensitiveHeaders(t *testing.T) {
 
 	downstreamPayload := resp["downstream_request"].(map[string]any)
 	downstreamHeaders := downstreamPayload["headers"].(map[string]any)
-	require.Equal(t, "Bearer ****", downstreamHeaders["Authorization"])
+	require.Equal(t, "Bearer downstream-secret", downstreamHeaders["Authorization"])
 
 	upstreamPayload := resp["upstream_request"].(map[string]any)
 	upstreamHeaders := upstreamPayload["headers"].(map[string]any)
-	require.Equal(t, "Bearer ****", upstreamHeaders["Authorization"])
-	require.Equal(t, "****", upstreamHeaders["X-Api-Key"])
+	require.Equal(t, "Bearer top-secret", upstreamHeaders["Authorization"])
+	require.Equal(t, "secret-key", upstreamHeaders["X-Api-Key"])
 	require.Equal(t, "trace-123", upstreamHeaders["X-Trace-Id"])
 
 	upstreamBody := upstreamPayload["body"].(map[string]any)
@@ -137,6 +139,7 @@ func TestTryWritePreviewFromAdaptorSummarizesMultipartBody(t *testing.T) {
 	body := "--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello\r\n--boundary--\r\n"
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/audio/transcriptions", bytes.NewBufferString(body))
 	ctx.Request.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	ctx.Set("role", appcommon.RoleAdminUser)
 
 	info := &relaycommon.RelayInfo{
 		RelayMode:            relayconstant.RelayModeAudioTranscription,
@@ -177,4 +180,49 @@ func TestChannelOtherSettingsPreviewModeRoundTrip(t *testing.T) {
 	var decoded dto.ChannelOtherSettings
 	require.NoError(t, appcommon.Unmarshal(data, &decoded))
 	require.True(t, decoded.RequestPreviewModeEnabled)
+}
+
+func TestTryWritePreviewFromAdaptorReturnsUnavailableForCommonUser(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	info := &relaycommon.RelayInfo{
+		RelayMode:            relayconstant.RelayModeChatCompletions,
+		RequestURLPath:       "/v1/chat/completions",
+		IsChannelPreviewMode: true,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelOtherSettings: dto.ChannelOtherSettings{
+				RequestPreviewModeEnabled: true,
+			},
+		},
+	}
+
+	handled, err := TryWritePreviewFromAdaptor(ctx, info, &previewTestAdaptor{}, bytes.NewBufferString(`{"prompt":"hello"}`))
+	require.NoError(t, err)
+	require.True(t, handled)
+	require.True(t, IsRequestPreviewHandled(ctx))
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+
+	var resp map[string]any
+	require.NoError(t, appcommon.Unmarshal(recorder.Body.Bytes(), &resp))
+	errorPayload := resp["error"].(map[string]any)
+	require.Equal(t, "该模型正在调整，请稍后再试", errorPayload["message"])
+}
+
+func TestBodyPayloadFromLargeJSONReturnsFullJSON(t *testing.T) {
+	t.Parallel()
+
+	largePrompt := strings.Repeat("a", 1<<20+128)
+	payload := []byte(`{"prompt":"` + largePrompt + `"}`)
+
+	result := bodyPayloadFromBytes(payload, "application/json")
+	require.Equal(t, "json", result.Kind)
+	parsed, ok := result.JSON.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, largePrompt, parsed["prompt"])
 }

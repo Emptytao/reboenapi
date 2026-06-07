@@ -55,6 +55,25 @@ type RequestPreviewLogQueryParams struct {
 	ChannelID      int
 }
 
+func requestPreviewLogListSelectFields() []string {
+	return []string{
+		"id",
+		"user_id",
+		"username",
+		"created_at",
+		"channel_id",
+		"channel_type",
+		"request_path",
+		"relay_mode",
+		"origin_model_name",
+		"upstream_model_name",
+		"client_requested_stream",
+		"request_id",
+		logGroupCol,
+		"upstream_url",
+	}
+}
+
 func RecordRequestPreviewLog(c *gin.Context, userId int, params RecordRequestPreviewLogParams) {
 	if userId == 0 {
 		return
@@ -152,7 +171,7 @@ func GetAllRequestPreviewLogs(startIdx int, num int, queryParams RequestPreviewL
 	if err = tx.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	if err = tx.Order("request_preview_logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error; err != nil {
+	if err = tx.Select(requestPreviewLogListSelectFields()).Order("request_preview_logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error; err != nil {
 		return nil, 0, err
 	}
 	if err = fillRequestPreviewChannelNames(logs); err != nil {
@@ -185,7 +204,7 @@ func GetUserRequestPreviewLogs(userId int, startIdx int, num int, queryParams Re
 		common.SysError("failed to count request preview logs: " + err.Error())
 		return nil, 0, errors.New("查询请求预览日志失败")
 	}
-	if err = tx.Order("request_preview_logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error; err != nil {
+	if err = tx.Select(requestPreviewLogListSelectFields()).Order("request_preview_logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error; err != nil {
 		common.SysError("failed to query request preview logs: " + err.Error())
 		return nil, 0, errors.New("查询请求预览日志失败")
 	}
@@ -193,6 +212,20 @@ func GetUserRequestPreviewLogs(userId int, startIdx int, num int, queryParams Re
 		return logs, total, err
 	}
 	return logs, total, nil
+}
+
+func GetRequestPreviewLogByID(id int) (*RequestPreviewLog, error) {
+	if id == 0 {
+		return nil, errors.New("invalid request preview log id")
+	}
+	var log RequestPreviewLog
+	if err := LOG_DB.First(&log, id).Error; err != nil {
+		return nil, err
+	}
+	if err := fillRequestPreviewChannelNames([]*RequestPreviewLog{&log}); err != nil {
+		return nil, err
+	}
+	return &log, nil
 }
 
 func fillRequestPreviewChannelNames(logs []*RequestPreviewLog) error {

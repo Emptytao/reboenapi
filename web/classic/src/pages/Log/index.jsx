@@ -26,6 +26,7 @@ import DrawingLogsPage from '../../components/table/mj-logs';
 import PreviewLogsPage from '../../components/table/preview-logs';
 import TaskLogsPage from '../../components/table/task-logs';
 import { useSidebar } from '../../hooks/common/useSidebar';
+import { isAdmin } from '../../helpers';
 
 const LOG_TABS = {
   usage: 'usage',
@@ -43,6 +44,7 @@ const Log = () => {
 
   const drawingEnabled = localStorage.getItem('enable_drawing') === 'true';
   const taskEnabled = localStorage.getItem('enable_task') === 'true';
+  const isAdminUser = isAdmin();
 
   const tabs = useMemo(
     () =>
@@ -68,11 +70,11 @@ const Log = () => {
         {
           itemKey: LOG_TABS.preview,
           tab: t('请求预览日志'),
-          visible: isModuleVisible('console', 'log'),
+          visible: isAdminUser && isModuleVisible('console', 'log'),
           content: <PreviewLogsPage />,
         },
       ].filter((tab) => tab.visible),
-    [drawingEnabled, isModuleVisible, t, taskEnabled],
+    [drawingEnabled, isAdminUser, isModuleVisible, t, taskEnabled],
   );
 
   useEffect(() => {

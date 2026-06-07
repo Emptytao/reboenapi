@@ -314,7 +314,7 @@ func SetApiRouter(router *gin.Engine) {
 
 		requestPreviewLogRoute := apiRouter.Group("/preview-log")
 		requestPreviewLogRoute.GET("/", middleware.AdminAuth(), controller.GetAllRequestPreviewLogs)
-		requestPreviewLogRoute.GET("/self", middleware.UserAuth(), controller.GetUserRequestPreviewLogs)
+		requestPreviewLogRoute.GET("/:id", middleware.AdminAuth(), controller.GetRequestPreviewLog)
 
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)

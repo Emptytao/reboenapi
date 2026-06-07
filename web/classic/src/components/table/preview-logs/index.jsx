@@ -54,6 +54,41 @@ function prettyPreviewPayload(payload) {
   }
 }
 
+function safeParsePreviewPayload(payload) {
+  if (!payload) return null;
+  try {
+    const parsed = JSON.parse(payload);
+    if (parsed && parsed.object === 'channel_request_preview') {
+      return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+function stringifyPreviewValue(value) {
+  if (value === undefined || value === null || value === '') return '-';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function getPreviewBodyContent(body) {
+  if (!body) return '-';
+  if (body.kind === 'json') {
+    return stringifyPreviewValue(body.json);
+  }
+  if (body.kind === 'text') {
+    return body.text || '-';
+  }
+  if (body.kind === 'summary') {
+    return body.summary || '-';
+  }
+  return '-';
+}
+
 function getDefaultPreviewDateRangeStrings() {
   return {
     startTimestamp: timestamp2string(getTodayStartTimestamp()),
@@ -73,7 +108,12 @@ const PreviewLogsPage = () => {
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   const [logCount, setLogCount] = useState(0);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [previewPayload, setPreviewPayload] = useState('');
+  const parsedPreviewPayload = useMemo(
+    () => safeParsePreviewPayload(previewPayload),
+    [previewPayload],
+  );
   const defaultDateRange = useMemo(
     () => getDefaultPreviewDateRangeStrings(),
     [],
@@ -117,6 +157,12 @@ const PreviewLogsPage = () => {
   }, [formApi]);
 
   const refresh = useCallback(async () => {
+    if (!isAdminUser) {
+      setLoading(false);
+      setLogs([]);
+      setLogCount(0);
+      return;
+    }
     setLoading(true);
     try {
       const values = getFormValues();
@@ -135,10 +181,7 @@ const PreviewLogsPage = () => {
         }
       });
 
-      const path = isAdminUser
-        ? `/api/preview-log/?${query.toString()}`
-        : `/api/preview-log/self?${query.toString()}`;
-      const res = await API.get(path);
+      const res = await API.get(`/api/preview-log/?${query.toString()}`);
       if (res.data.success) {
         setLogs(res.data.data.items || []);
         setLogCount(res.data.data.total || 0);
@@ -156,10 +199,25 @@ const PreviewLogsPage = () => {
     refresh();
   }, [refresh]);
 
-  const openPreview = useCallback((payload) => {
-    setPreviewPayload(prettyPreviewPayload(payload));
+  const openPreview = useCallback(async (record) => {
     setPreviewModalOpen(true);
-  }, []);
+    setPreviewLoading(true);
+    setPreviewPayload('');
+    try {
+      const res = await API.get(`/api/preview-log/${record.id}`);
+      if (res.data.success) {
+        setPreviewPayload(prettyPreviewPayload(res.data.data?.payload || ''));
+      } else {
+        showError(res.data.message || t('获取日志详情失败'));
+        setPreviewModalOpen(false);
+      }
+    } catch {
+      showError(t('获取日志详情失败'));
+      setPreviewModalOpen(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [t]);
 
   const columns = useMemo(() => {
     const baseColumns = [
@@ -259,20 +317,10 @@ const PreviewLogsPage = () => {
         title: t('预览'),
         dataIndex: 'payload',
         key: 'payload',
-        render: (value) => (
+        render: (_, record) => (
           <Space>
-            <Button type='primary' size='small' onClick={() => openPreview(value)}>
+            <Button type='primary' size='small' onClick={() => openPreview(record)}>
               {t('查看预览')}
-            </Button>
-            <Button
-              type='tertiary'
-              size='small'
-              onClick={() => {
-                copy(prettyPreviewPayload(value));
-                showSuccess(t('已复制到剪贴板'));
-              }}
-            >
-              {t('复制')}
             </Button>
           </Space>
         ),
@@ -305,16 +353,95 @@ const PreviewLogsPage = () => {
       : baseColumns;
   }, [compactMode, isAdminUser, openPreview, t]);
 
+  const handleCopyText = useCallback((value, successMessage) => {
+    copy(value);
+    showSuccess(successMessage || t('已复制到剪贴板'));
+  }, [t]);
+
+  const renderInfoItem = useCallback((label, value, options = {}) => {
+    const displayValue = stringifyPreviewValue(value);
+    const isMultiline = displayValue.includes('\n') || displayValue.length > 80;
+    return (
+      <div
+        key={`${label}-${displayValue}`}
+        className='rounded-xl border p-3'
+        style={{ borderColor: 'var(--semi-color-border)', background: 'var(--semi-color-bg-1)' }}
+      >
+        <div className='mb-1 flex items-center justify-between gap-2'>
+          <Text type='secondary' size='small'>{label}</Text>
+          {options.copyable && displayValue !== '-' ? (
+            <Button
+              type='tertiary'
+              size='small'
+              onClick={() => handleCopyText(displayValue)}
+            >
+              {t('复制')}
+            </Button>
+          ) : null}
+        </div>
+        {isMultiline ? (
+          <pre
+            className='overflow-auto text-xs leading-6'
+            style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}
+          >
+            {displayValue}
+          </pre>
+        ) : (
+          <Text className={options.mono ? 'font-mono text-xs' : 'text-sm'}>
+            {displayValue}
+          </Text>
+        )}
+      </div>
+    );
+  }, [handleCopyText, t]);
+
+  const renderPacketCard = useCallback((title, packet) => {
+    if (!packet) return null;
+    return (
+      <div
+        className='rounded-2xl border p-4 space-y-3'
+        style={{ borderColor: 'var(--semi-color-border)', background: 'var(--semi-color-bg-0)' }}
+      >
+        <div className='flex items-center justify-between gap-3'>
+          <Text strong>{title}</Text>
+          <Button
+            type='tertiary'
+            size='small'
+            onClick={() => handleCopyText(stringifyPreviewValue(packet), t('已复制数据包'))}
+          >
+            {t('复制数据包')}
+          </Button>
+        </div>
+        <div className='grid grid-cols-1 gap-3'>
+          {renderInfoItem(t('Method'), packet.method || '-', { mono: true })}
+          {packet.path ? renderInfoItem(t('Path'), packet.path, { mono: true, copyable: true }) : null}
+          {packet.url ? renderInfoItem(t('URL'), packet.url, { mono: true, copyable: true }) : null}
+          {renderInfoItem(t('Query'), packet.query || {}, { copyable: true })}
+          {renderInfoItem(t('Headers'), packet.headers || {}, { copyable: true })}
+          {renderInfoItem(
+            `${t('Body')} (${packet.body?.kind || 'empty'} / ${packet.body?.content_type || '-'})`,
+            getPreviewBodyContent(packet.body),
+            { copyable: true },
+          )}
+        </div>
+      </div>
+    );
+  }, [handleCopyText, renderInfoItem, t]);
+
   return (
     <>
       <Modal
         title={t('请求预览详情')}
         visible={previewModalOpen}
-        onCancel={() => setPreviewModalOpen(false)}
+        onCancel={() => {
+          setPreviewModalOpen(false);
+          setPreviewPayload('');
+        }}
         footer={
           <Space>
             <Button
               type='tertiary'
+              disabled={!previewPayload}
               onClick={() => {
                 copy(previewPayload);
                 showSuccess(t('已复制到剪贴板'));
@@ -330,16 +457,49 @@ const PreviewLogsPage = () => {
         style={{ width: isMobile ? '94vw' : 960 }}
         bodyStyle={{ paddingTop: 8 }}
       >
-        <pre
-          className='max-h-[65vh] overflow-auto rounded-xl p-3 text-xs leading-6'
-          style={{
-            background: 'var(--semi-color-fill-0)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-          }}
-        >
-          {previewPayload}
-        </pre>
+        {previewLoading ? (
+          <div className='flex items-center justify-center py-12'>
+            <Text type='secondary'>{t('加载中...')}</Text>
+          </div>
+        ) : parsedPreviewPayload ? (
+          <div className='max-h-[70vh] overflow-auto space-y-4 pr-1'>
+            <div
+              className='rounded-2xl border p-4 space-y-3'
+              style={{ borderColor: 'var(--semi-color-border)', background: 'var(--semi-color-bg-0)' }}
+            >
+              <Text strong>{t('请求信息')}</Text>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+                {renderInfoItem(t('Channel ID'), parsedPreviewPayload.channel?.id ?? '-', { mono: true })}
+                {renderInfoItem(t('Channel Type'), parsedPreviewPayload.channel?.type ?? '-', { mono: true })}
+                {renderInfoItem(t('Base URL'), parsedPreviewPayload.channel?.base_url || '-', { mono: true, copyable: true })}
+                {renderInfoItem(t('Request Path'), parsedPreviewPayload.relay?.request_path || '-', { mono: true, copyable: true })}
+                {renderInfoItem(t('Relay Mode'), parsedPreviewPayload.relay?.relay_mode || '-', { mono: true })}
+                {renderInfoItem(t('Origin Model'), parsedPreviewPayload.channel?.origin_model || '-', { mono: true, copyable: true })}
+                {renderInfoItem(t('Upstream Model'), parsedPreviewPayload.channel?.upstream_model || '-', { mono: true, copyable: true })}
+                {renderInfoItem(t('Client Requested Stream'), parsedPreviewPayload.relay?.client_requested_stream ? 'true' : 'false', { mono: true })}
+                {renderInfoItem(t('Response Mode'), parsedPreviewPayload.relay?.response_mode || '-', { mono: true })}
+                {renderInfoItem(t('Request Conversion Chain'), parsedPreviewPayload.relay?.request_conversion_chain || [], { copyable: true })}
+                {renderInfoItem(t('Final Request Relay Format'), parsedPreviewPayload.relay?.final_request_relay_format || '-', { mono: true })}
+              </div>
+            </div>
+
+            <div className='grid grid-cols-1 xl:grid-cols-2 gap-4'>
+              {renderPacketCard(t('下游数据包'), parsedPreviewPayload.downstream_request)}
+              {renderPacketCard(t('上游数据包'), parsedPreviewPayload.upstream_request)}
+            </div>
+          </div>
+        ) : (
+          <pre
+            className='max-h-[65vh] overflow-auto rounded-xl p-3 text-xs leading-6'
+            style={{
+              background: 'var(--semi-color-fill-0)',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}
+          >
+            {previewPayload}
+          </pre>
+        )}
       </Modal>
 
       <CardPro

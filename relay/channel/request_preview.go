@@ -18,7 +18,6 @@ import (
 
 const (
 	channelRequestPreviewHandledKey = "channel_request_preview_handled"
-	maxInlinePreviewBodyBytes       = 1 << 20
 )
 
 type previewBodyPayload struct {
@@ -81,6 +80,9 @@ func TryWritePreviewFromAdaptor(c *gin.Context, info *relaycommon.RelayInfo, ada
 	if info == nil || !info.IsChannelPreviewMode || adaptor == nil {
 		return false, nil
 	}
+	if !canRevealSensitivePreviewData(c) {
+		return true, writePreviewUnavailableResponse(c, info)
+	}
 	req, err := buildPreviewRequestForAdaptor(c, info, adaptor, requestBody)
 	if err != nil {
 		return false, err
@@ -91,6 +93,9 @@ func TryWritePreviewFromAdaptor(c *gin.Context, info *relaycommon.RelayInfo, ada
 func TryWritePreviewFromTaskAdaptor(c *gin.Context, info *relaycommon.RelayInfo, adaptor TaskAdaptor, requestBody io.Reader) (bool, error) {
 	if info == nil || !info.IsChannelPreviewMode || adaptor == nil {
 		return false, nil
+	}
+	if !canRevealSensitivePreviewData(c) {
+		return true, writePreviewUnavailableResponse(c, info)
 	}
 	req, err := buildPreviewRequestForTaskAdaptor(c, info, adaptor, requestBody)
 	if err != nil {
@@ -153,7 +158,7 @@ func writePreviewResponse(c *gin.Context, info *relaycommon.RelayInfo, upstreamR
 		return err
 	}
 
-	resp := channelPreviewResponse{
+	rawResp := channelPreviewResponse{
 		Object: "channel_request_preview",
 		Channel: previewChannelPayload{
 			ID:                        info.ChannelId,
@@ -175,18 +180,18 @@ func writePreviewResponse(c *gin.Context, info *relaycommon.RelayInfo, upstreamR
 			Method:  c.Request.Method,
 			Path:    c.Request.URL.Path,
 			Query:   cloneQueryValues(c.Request.URL.Query()),
-			Headers: maskHeaderMap(flattenHeader(c.Request.Header), false),
+			Headers: flattenHeader(c.Request.Header),
 			Body:    downstreamBody,
 		},
 		UpstreamRequest: previewRequestPayload{
 			Method:  upstreamReq.Method,
 			URL:     upstreamReq.URL.String(),
-			Headers: maskHeaderMap(flattenHeader(upstreamReq.Header, upstreamReq.Host), true),
+			Headers: flattenHeader(upstreamReq.Header, upstreamReq.Host),
 			Body:    upstreamBody,
 		},
 	}
 
-	payloadBytes, err := appcommon.Marshal(resp)
+	payloadBytes, err := appcommon.Marshal(rawResp)
 	if err == nil {
 		model.RecordRequestPreviewLog(c, info.UserId, model.RecordRequestPreviewLogParams{
 			ChannelId:             info.ChannelId,
@@ -205,7 +210,7 @@ func writePreviewResponse(c *gin.Context, info *relaycommon.RelayInfo, upstreamR
 
 	c.Set(channelRequestPreviewHandledKey, true)
 	c.Abort()
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, rawResp)
 	return nil
 }
 
@@ -243,11 +248,6 @@ func bodyPayloadFromBytes(data []byte, contentType string) previewBodyPayload {
 	}
 
 	normalizedType := normalizeMediaType(contentType)
-	if len(data) > maxInlinePreviewBodyBytes {
-		payload.Kind = "summary"
-		payload.Summary = "Body omitted because it exceeds the inline preview limit."
-		return payload
-	}
 	if strings.HasPrefix(normalizedType, "multipart/") {
 		payload.Kind = "summary"
 		payload.Summary = "Body omitted for multipart content."
@@ -270,6 +270,46 @@ func bodyPayloadFromBytes(data []byte, contentType string) previewBodyPayload {
 	payload.Kind = "summary"
 	payload.Summary = "Body omitted for binary or unsupported content."
 	return payload
+}
+
+func canRevealSensitivePreviewData(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	role := c.GetInt("role")
+	if role >= appcommon.RoleAdminUser {
+		return true
+	}
+	userID := c.GetInt("id")
+	if userID == 0 {
+		return false
+	}
+	return model.IsAdmin(userID)
+}
+
+func writePreviewUnavailableResponse(c *gin.Context, info *relaycommon.RelayInfo) error {
+	if c == nil {
+		return fmt.Errorf("missing request context")
+	}
+	newAPIError := types.NewErrorWithStatusCode(
+		fmt.Errorf("该模型正在调整，请稍后再试"),
+		types.ErrorCodeBadResponse,
+		http.StatusServiceUnavailable,
+		types.ErrOptionWithSkipRetry(),
+	)
+	c.Set(channelRequestPreviewHandledKey, true)
+	c.Abort()
+	if info != nil && info.GetFinalRequestRelayFormat() == types.RelayFormatClaude {
+		c.JSON(newAPIError.StatusCode, gin.H{
+			"type":  "error",
+			"error": newAPIError.ToClaudeError(),
+		})
+		return nil
+	}
+	c.JSON(newAPIError.StatusCode, gin.H{
+		"error": newAPIError.ToOpenAIError(),
+	})
+	return nil
 }
 
 func shouldPreviewAsFormRequest(c *gin.Context, info *relaycommon.RelayInfo) bool {
