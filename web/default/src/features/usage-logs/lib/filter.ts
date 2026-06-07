@@ -25,6 +25,7 @@ import type {
   LogFilters,
   CommonLogFilters,
   DrawingLogFilters,
+  PreviewLogFilters,
   TaskLogFilters,
 } from '../types'
 
@@ -72,6 +73,16 @@ export function buildSearchParams(
       return {
         ...baseParams,
         ...(taskFilters.taskId && { filter: taskFilters.taskId }),
+      }
+    }
+    case 'preview': {
+      const previewFilters = filters as PreviewLogFilters
+      return {
+        ...baseParams,
+        ...(previewFilters.model && { model: previewFilters.model }),
+        ...(previewFilters.username && { username: previewFilters.username }),
+        ...(previewFilters.requestId && { requestId: previewFilters.requestId }),
+        ...(previewFilters.path && { path: previewFilters.path }),
       }
     }
     default:

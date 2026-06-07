@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -174,6 +175,11 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		requestBody = body
 	}
 
+	if handled, err := relaychannel.TryWritePreviewFromAdaptor(c, info, adaptor, requestBody); err != nil {
+		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+	} else if handled {
+		return nil
+	}
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		logger.LogError(c, "Do gemini request failed: "+err.Error())
@@ -278,6 +284,11 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 	info.UpstreamRequestBodySize = size
 	requestBody = body
 
+	if handled, err := relaychannel.TryWritePreviewFromAdaptor(c, info, adaptor, requestBody); err != nil {
+		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+	} else if handled {
+		return nil
+	}
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		logger.LogError(c, "Do gemini request failed: "+err.Error())

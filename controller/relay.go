@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/relay"
+	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -222,6 +223,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			relayInfo.LastError = nil
+			if relaychannel.IsRequestPreviewHandled(c) && relayInfo.Billing != nil {
+				relayInfo.Billing.Refund(c)
+			}
 			return
 		}
 
@@ -567,6 +571,9 @@ func RelayTask(c *gin.Context) {
 	if len(useChannel) > 1 {
 		retryLogStr := fmt.Sprintf("重试：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
+	}
+	if relaychannel.IsRequestPreviewHandled(c) {
+		return
 	}
 
 	// ── 成功：结算 + 日志 + 插入任务 ──

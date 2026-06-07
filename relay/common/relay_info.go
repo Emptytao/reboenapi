@@ -151,6 +151,7 @@ type RelayInfo struct {
 	SubscriptionAmountUsedAfterPreConsume int64
 	IsClaudeBetaQuery                     bool // /v1/messages?beta=true
 	IsChannelTest                         bool // channel test request
+	IsChannelPreviewMode                  bool // channel request preview mode
 	RetryIndex                            int
 	LastError                             *types.NewAPIError
 	RuntimeHeadersOverride                map[string]interface{}
@@ -237,6 +238,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	}
 
 	info.ChannelMeta = channelMeta
+	info.IsChannelPreviewMode = channelMeta.ChannelOtherSettings.RequestPreviewModeEnabled
 
 	// reset some fields based on channel meta
 	// 重置某些字段，例如模型名称等

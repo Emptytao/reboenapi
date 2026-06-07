@@ -227,6 +227,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
     values.claude_beta_query ||
+    values.request_preview_mode_enabled ||
     hasSpottedFrogModelMapOverrides(values) ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
@@ -3282,6 +3283,31 @@ export function ChannelMutateDrawer({
                                 <FormLabel>{t('Pass Through Body')}</FormLabel>
                                 <FormDescription>
                                   {t('Pass request body directly to upstream')}
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='request_preview_mode_enabled'
+                          render={({ field }) => (
+                            <FormItem className='flex items-center justify-between px-4 py-3'>
+                              <div className='space-y-0.5'>
+                                <FormLabel>
+                                  {t('Request Preview Mode')}
+                                </FormLabel>
+                                <FormDescription>
+                                  {t(
+                                    'Skip real upstream calls for this channel and return the received request together with the forwarded upstream request.'
+                                  )}
                                 </FormDescription>
                               </div>
                               <FormControl>

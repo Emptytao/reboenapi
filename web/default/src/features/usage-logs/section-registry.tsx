@@ -24,7 +24,7 @@ import { createSectionRegistry } from '@/features/system-settings/utils/section-
 const USAGE_LOGS_SECTIONS = [
   {
     id: 'common',
-    titleKey: 'Common Logs',
+    titleKey: 'Usage Logs',
     build: () => null, // Content is rendered directly in the page component
   },
   {
@@ -35,6 +35,11 @@ const USAGE_LOGS_SECTIONS = [
   {
     id: 'task',
     titleKey: 'Task Logs',
+    build: () => null, // Content is rendered directly in the page component
+  },
+  {
+    id: 'preview',
+    titleKey: 'Request Preview Logs',
     build: () => null, // Content is rendered directly in the page component
   },
 ] as const

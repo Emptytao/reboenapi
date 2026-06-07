@@ -18,12 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import MjLogsTable from '../../components/table/mj-logs';
+import { Navigate } from 'react-router-dom';
 
-const Midjourney = () => (
-  <div className='mt-[60px] px-2'>
-    <MjLogsTable />
-  </div>
-);
+const Midjourney = () => <Navigate to='/console/log?tab=drawing' replace />;
 
 export default Midjourney;

@@ -13,7 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/relay/channel"
+	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -185,6 +185,20 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			return nil, service.TaskErrorFromAPIError(relaycommon.NewAPIErrorFromParamOverride(fixedErr))
 		}
 		return nil, service.TaskErrorWrapperLocal(err, "param_override_invalid", http.StatusBadRequest)
+	}
+
+	if info.IsChannelPreviewMode {
+		requestBody, err := adaptor.BuildRequestBody(c, info)
+		if err != nil {
+			return nil, service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
+		}
+		handled, err := relaychannel.TryWritePreviewFromTaskAdaptor(c, info, adaptor, requestBody)
+		if err != nil {
+			return nil, service.TaskErrorWrapper(err, "preview_request_failed", http.StatusInternalServerError)
+		}
+		if handled {
+			return nil, nil
+		}
 	}
 
 	// 3. 预生成公开 task ID（仅首次）
@@ -407,7 +421,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest)
 			return
 		}
-		if converter, ok := adaptor.(channel.OpenAIVideoConverter); ok {
+		if converter, ok := adaptor.(relaychannel.OpenAIVideoConverter); ok {
 			openAIVideoData, err := converter.ConvertToOpenAIVideo(originTask)
 			if err != nil {
 				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError)

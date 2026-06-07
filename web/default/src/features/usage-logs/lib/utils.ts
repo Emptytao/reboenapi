@@ -23,7 +23,9 @@ import {
   getAllLogs,
   getUserLogs,
   getAllMidjourneyLogs,
+  getAllRequestPreviewLogs,
   getUserMidjourneyLogs,
+  getUserRequestPreviewLogs,
   getAllTaskLogs,
   getUserTaskLogs,
 } from '../api'
@@ -37,6 +39,7 @@ import type {
   GetLogsResponse,
   FetchLogsConfig,
   GetMidjourneyLogsParams,
+  GetPreviewLogsParams,
   GetTaskLogsParams,
 } from '../types'
 
@@ -249,6 +252,32 @@ export function buildApiParams(config: {
   return params
 }
 
+function buildPreviewApiParams(config: {
+  page: number
+  pageSize: number
+  searchParams: Record<string, unknown>
+  isAdmin: boolean
+}): GetPreviewLogsParams {
+  const { page, pageSize, searchParams, isAdmin } = config
+
+  return {
+    p: page,
+    page_size: pageSize,
+    ...(searchParams.model ? { model_name: String(searchParams.model) } : {}),
+    ...(searchParams.requestId
+      ? { request_id: String(searchParams.requestId) }
+      : {}),
+    ...(searchParams.path ? { request_path: String(searchParams.path) } : {}),
+    ...(isAdmin && searchParams.channel
+      ? { channel: Number(searchParams.channel) || 0 }
+      : {}),
+    ...(isAdmin && searchParams.username
+      ? { username: String(searchParams.username) }
+      : {}),
+    ...buildTimeRangeParams(searchParams, false),
+  }
+}
+
 // ============================================================================
 // Data Fetching
 // ============================================================================
@@ -271,6 +300,18 @@ export async function fetchLogsByCategory(
       isAdmin,
     })
     return isAdmin ? await getAllLogs(params) : await getUserLogs(params)
+  }
+
+  if (logCategory === 'preview') {
+    const params = buildPreviewApiParams({
+      page,
+      pageSize,
+      searchParams,
+      isAdmin,
+    })
+    return isAdmin
+      ? await getAllRequestPreviewLogs(params)
+      : await getUserRequestPreviewLogs(params)
   }
 
   // For drawing and task logs

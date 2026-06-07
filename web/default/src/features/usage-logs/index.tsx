@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
@@ -37,17 +37,19 @@ import {
 } from './section-registry'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
-const TASK_LOG_SECTIONS = ['drawing', 'task'] as const
 
 const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
   common: {
-    titleKey: 'Common Logs',
+    titleKey: 'Usage Logs',
   },
   drawing: {
     titleKey: 'Drawing Logs',
   },
   task: {
     titleKey: 'Task Logs',
+  },
+  preview: {
+    titleKey: 'Request Preview Logs',
   },
 }
 
@@ -70,11 +72,13 @@ function UsageLogsContent() {
   const tabNavGroups = useMemo<NavGroup[]>(
     () => [
       {
-        title: 'Task Logs',
-        items: TASK_LOG_SECTIONS.map((section) => ({
+        title: 'Logs',
+        items: (['common', 'drawing', 'task', 'preview'] as const).map(
+          (section) => ({
           title: SECTION_META[section].titleKey,
           url: `/usage-logs/${section}`,
-        })),
+          })
+        ),
       },
     ],
     []
@@ -92,6 +96,24 @@ function UsageLogsContent() {
         ),
     [filteredTabGroups]
   )
+  const availableSections =
+    visibleSections.length > 0
+      ? visibleSections
+      : (['common', 'drawing', 'task', 'preview'] as UsageLogsSectionId[])
+
+  useEffect(() => {
+    if (
+      visibleSections.length > 0 &&
+      !visibleSections.includes(activeCategory) &&
+      visibleSections[0]
+    ) {
+      void navigate({
+        to: '/usage-logs/$section',
+        params: { section: visibleSections[0] },
+        replace: true,
+      })
+    }
+  }, [activeCategory, navigate, visibleSections])
 
   const handleSectionChange = useCallback(
     (section: string) => {
@@ -103,23 +125,18 @@ function UsageLogsContent() {
     [navigate]
   )
 
-  const pageMeta =
-    activeCategory === 'common' ? SECTION_META.common : SECTION_META.task
-  const showTaskSwitcher =
-    activeCategory !== 'common' && visibleSections.length > 1
+  const showSectionTabs = availableSections.length > 1
 
   return (
     <>
       <SectionPageLayout>
-        <SectionPageLayout.Title>
-          {t(pageMeta.titleKey)}
-        </SectionPageLayout.Title>
+        <SectionPageLayout.Title>{t('Logs')}</SectionPageLayout.Title>
         <SectionPageLayout.Content>
           <div className='space-y-4'>
-            {showTaskSwitcher && (
+            {showSectionTabs && (
               <Tabs value={activeCategory} onValueChange={handleSectionChange}>
                 <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
-                  {visibleSections.map((section) => (
+                  {availableSections.map((section) => (
                     <TabsTrigger key={section} value={section}>
                       {t(SECTION_META[section].titleKey)}
                     </TabsTrigger>

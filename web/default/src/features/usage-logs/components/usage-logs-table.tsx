@@ -46,6 +46,7 @@ import { useColumnsByCategory } from '../lib/columns'
 import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
+import { PreviewLogsFilterBar } from './preview-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
 
@@ -175,6 +176,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   }, [pageCount, ensurePageInRange])
 
   const isCommon = logCategory === 'common'
+  const isPreview = logCategory === 'preview'
 
   return (
     <DataTablePage
@@ -183,9 +185,15 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       isLoading={isLoadingData}
       isFetching={isFetching}
       emptyTitle={t('No Logs Found')}
-      emptyDescription={t(
-        'No usage logs available. Logs will appear here once API calls are made.'
-      )}
+      emptyDescription={
+        isPreview
+          ? t(
+              'No request preview logs available. Preview traffic will appear here once request preview mode is used.'
+            )
+          : t(
+              'No usage logs available. Logs will appear here once API calls are made.'
+            )
+      }
       skeletonKeyPrefix='usage-log-skeleton'
       tableClassName={cn(
         'overflow-x-auto',
@@ -193,15 +201,19 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       )}
       tableHeaderClassName='bg-muted/30 sticky top-0 z-10'
       mobile={
-        <UsageLogsMobileList
-          table={table}
-          isLoading={isLoadingData}
-          logCategory={logCategory}
-        />
+        isPreview ? undefined : (
+          <UsageLogsMobileList
+            table={table}
+            isLoading={isLoadingData}
+            logCategory={logCategory}
+          />
+        )
       }
       toolbar={
         isCommon ? (
           <CommonLogsFilterBar table={table} />
+        ) : isPreview ? (
+          <PreviewLogsFilterBar table={table} />
         ) : (
           <TaskLogsFilterBar table={table} logCategory={logCategory} />
         )

@@ -69,6 +69,13 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   const [routerMapState, setRouterMapState] = useState(routerMap);
 
   const workspaceItems = useMemo(() => {
+    const hasLogsPage =
+      isModuleVisible('console', 'log') ||
+      (localStorage.getItem('enable_drawing') === 'true' &&
+        isModuleVisible('console', 'midjourney')) ||
+      (localStorage.getItem('enable_task') === 'true' &&
+        isModuleVisible('console', 'task'));
+
     const items = [
       {
         text: t('数据看板'),
@@ -88,30 +95,15 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('使用日志'),
         itemKey: 'log',
         to: '/log',
-      },
-      {
-        text: t('绘图日志'),
-        itemKey: 'midjourney',
-        to: '/midjourney',
-        className:
-          localStorage.getItem('enable_drawing') === 'true'
-            ? ''
-            : 'tableHiddle',
-      },
-      {
-        text: t('任务日志'),
-        itemKey: 'task',
-        to: '/task',
-        className:
-          localStorage.getItem('enable_task') === 'true' ? '' : 'tableHiddle',
+        visible: hasLogsPage,
       },
     ];
 
-    // 根据配置过滤项目
-    const filteredItems = items.filter((item) => {
-      const configVisible = isModuleVisible('console', item.itemKey);
-      return configVisible;
-    });
+    const filteredItems = items.filter((item) =>
+      item.itemKey === 'log'
+        ? item.visible !== false
+        : isModuleVisible('console', item.itemKey),
+    );
 
     return filteredItems;
   }, [

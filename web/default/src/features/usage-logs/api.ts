@@ -24,6 +24,7 @@ import type {
   GetLogStatsParams,
   GetLogStatsResponse,
   GetMidjourneyLogsParams,
+  GetPreviewLogsParams,
   GetTaskLogsParams,
   UserInfo,
 } from './types'
@@ -109,3 +110,13 @@ export const getAllTaskLogs = (params: GetTaskLogsParams) =>
 
 export const getUserTaskLogs = (params: GetTaskLogsParams) =>
   fetchLogs('/api/task', params, false)
+
+// ============================================================================
+// Request Preview Logs API
+// ============================================================================
+
+export const getAllRequestPreviewLogs = (params: GetPreviewLogsParams) =>
+  fetchLogs('/api/preview-log', params, true)
+
+export const getUserRequestPreviewLogs = (params: GetPreviewLogsParams) =>
+  fetchLogs('/api/preview-log', params, false)

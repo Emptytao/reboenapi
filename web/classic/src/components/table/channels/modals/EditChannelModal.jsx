@@ -678,6 +678,7 @@ const EditChannelModal = (props) => {
     allow_inference_geo: false,
     allow_speed: false,
     claude_beta_query: false,
+    request_preview_mode_enabled: false,
     upstream_model_update_check_enabled: false,
     upstream_model_update_auto_sync_enabled: false,
     upstream_model_update_last_check_time: 0,
@@ -1401,6 +1402,8 @@ const EditChannelModal = (props) => {
             parsedSettings.allow_inference_geo || false;
           data.allow_speed = parsedSettings.allow_speed || false;
           data.claude_beta_query = parsedSettings.claude_beta_query || false;
+          data.request_preview_mode_enabled =
+            parsedSettings.request_preview_mode_enabled === true;
           data.upstream_model_update_check_enabled =
             parsedSettings.upstream_model_update_check_enabled === true;
           data.upstream_model_update_auto_sync_enabled =
@@ -1435,6 +1438,7 @@ const EditChannelModal = (props) => {
           data.allow_inference_geo = false;
           data.allow_speed = false;
           data.claude_beta_query = false;
+          data.request_preview_mode_enabled = false;
           data.upstream_model_update_check_enabled = false;
           data.upstream_model_update_auto_sync_enabled = false;
           data.upstream_model_update_last_check_time = 0;
@@ -1454,6 +1458,7 @@ const EditChannelModal = (props) => {
         data.allow_inference_geo = false;
         data.allow_speed = false;
         data.claude_beta_query = false;
+        data.request_preview_mode_enabled = false;
         data.upstream_model_update_check_enabled = false;
         data.upstream_model_update_auto_sync_enabled = false;
         data.upstream_model_update_last_check_time = 0;
@@ -1534,6 +1539,7 @@ const EditChannelModal = (props) => {
         data.pass_through_body_enabled ||
         data.force_format ||
         data.claude_beta_query ||
+        data.request_preview_mode_enabled ||
         data.system_prompt_override;
       if (hasAdvancedValues) {
         setAdvancedSettingsOpen(true);
@@ -1874,14 +1880,14 @@ const EditChannelModal = (props) => {
     resolveStatusCodeRiskConfirm(false);
     formApiRef.current?.reset();
     // 重置渠道设置状态
-    setChannelSettings({
-      force_format: false,
-      thinking_to_content: false,
-      proxy: '',
-      pass_through_body_enabled: false,
-      system_prompt: '',
-      system_prompt_override: false,
-    });
+      setChannelSettings({
+        force_format: false,
+        thinking_to_content: false,
+        proxy: '',
+        pass_through_body_enabled: false,
+        system_prompt: '',
+        system_prompt_override: false,
+      });
     // 重置密钥模式状态
     setKeyMode('append');
     // 重置企业账户状态
@@ -2300,6 +2306,9 @@ const EditChannelModal = (props) => {
       delete settings.vertex_key_type;
     }
 
+    settings.request_preview_mode_enabled =
+      localInputs.request_preview_mode_enabled === true;
+
     // type === 1 (OpenAI) 或 type === 14 (Claude): 设置字段透传控制（显式保存布尔值）
     if (localInputs.type === 1 || localInputs.type === 14) {
       settings.allow_service_tier = localInputs.allow_service_tier === true;
@@ -2374,6 +2383,7 @@ const EditChannelModal = (props) => {
     delete localInputs.allow_inference_geo;
     delete localInputs.allow_speed;
     delete localInputs.claude_beta_query;
+    delete localInputs.request_preview_mode_enabled;
     delete localInputs.upstream_model_update_check_enabled;
     delete localInputs.upstream_model_update_auto_sync_enabled;
     delete localInputs.upstream_model_update_last_check_time;
@@ -3174,6 +3184,7 @@ const EditChannelModal = (props) => {
 
                   <Form.Switch field='thinking_to_content' label={t('思考内容转换')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('thinking_to_content', value)} extraText={t('将 reasoning_content 转换为 <think> 标签拼接到内容中')} />
                   <Form.Switch field='pass_through_body_enabled' label={t('透传请求体')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelSettingsChange('pass_through_body_enabled', value)} extraText={t('启用请求体透传功能')} />
+                  <Form.Switch field='request_preview_mode_enabled' label={t('请求预览模式')} checkedText={t('开')} uncheckedText={t('关')} onChange={(value) => handleChannelOtherSettingsChange('request_preview_mode_enabled', value)} extraText={t('开启后，该渠道不会发起真实上游请求，而是直接返回下游请求和转发上游请求的预览结果，仅用于调试')} />
 
                   <Form.Input field='proxy' label={t('代理地址')} placeholder={t('例如: socks5://user:pass@host:port')} onChange={(value) => handleChannelSettingsChange('proxy', value)} showClear extraText={t('用于配置网络代理，支持 socks5 协议')} />
 

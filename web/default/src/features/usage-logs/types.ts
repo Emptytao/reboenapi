@@ -28,7 +28,7 @@ import type { UsageLog } from './data/schema'
 /**
  * Log category for different log types
  */
-export type LogCategory = 'common' | 'drawing' | 'task'
+export type LogCategory = 'common' | 'drawing' | 'task' | 'preview'
 
 // ============================================================================
 // Filter Types
@@ -70,9 +70,23 @@ export interface TaskLogFilters extends CommonFilters {
 }
 
 /**
+ * Request preview logs specific filters
+ */
+export interface PreviewLogFilters extends CommonFilters {
+  model?: string
+  username?: string
+  requestId?: string
+  path?: string
+}
+
+/**
  * Union type for all log filters
  */
-export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters
+export type LogFilters =
+  | CommonLogFilters
+  | DrawingLogFilters
+  | TaskLogFilters
+  | PreviewLogFilters
 
 // ============================================================================
 // Common Logs Additional Types
@@ -253,6 +267,29 @@ export interface TaskLog {
 }
 
 // ============================================================================
+// Request Preview Logs Types
+// ============================================================================
+
+export interface PreviewLog {
+  id: number
+  user_id: number
+  username?: string
+  created_at: number
+  channel_id: number
+  channel_name?: string
+  channel_type: number
+  request_path: string
+  relay_mode: string
+  origin_model_name: string
+  upstream_model_name: string
+  client_requested_stream: boolean
+  request_id: string
+  group?: string
+  upstream_url: string
+  payload: string
+}
+
+// ============================================================================
 // Common Log Types
 // ============================================================================
 
@@ -275,7 +312,7 @@ export interface GetLogsResponse {
   success: boolean
   message?: string
   data?: {
-    items: UsageLog[] | MidjourneyLog[] | TaskLog[]
+    items: UsageLog[] | MidjourneyLog[] | TaskLog[] | PreviewLog[]
     total: number
     page: number
     page_size: number
@@ -323,6 +360,22 @@ export interface GetTaskLogsParams {
   page_size?: number
   channel_id?: string
   task_id?: string
+  start_timestamp?: number
+  end_timestamp?: number
+}
+
+// ============================================================================
+// Request Preview Log Types
+// ============================================================================
+
+export interface GetPreviewLogsParams {
+  p?: number
+  page_size?: number
+  channel?: number
+  username?: string
+  model_name?: string
+  request_id?: string
+  request_path?: string
   start_timestamp?: number
   end_timestamp?: number
 }

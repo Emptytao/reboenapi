@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
@@ -140,6 +141,9 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if newApiErr != nil {
 			return newApiErr
 		}
+		if relaychannel.IsRequestPreviewHandled(c) {
+			return nil
+		}
 
 		service.PostTextConsumeQuota(c, info, usage, nil)
 		return nil
@@ -190,6 +194,11 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 	var httpResp *http.Response
+	if handled, err := relaychannel.TryWritePreviewFromAdaptor(c, info, adaptor, requestBody); err != nil {
+		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+	} else if handled {
+		return nil
+	}
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
