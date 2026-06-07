@@ -54,6 +54,13 @@ function prettyPreviewPayload(payload) {
   }
 }
 
+function getDefaultPreviewDateRangeStrings() {
+  return {
+    startTimestamp: timestamp2string(getTodayStartTimestamp()),
+    endTimestamp: timestamp2string(Math.floor(Date.now() / 1000) + 3600),
+  };
+}
+
 const PreviewLogsPage = () => {
   const { t } = useTranslation();
   const isAdminUser = isAdmin();
@@ -67,8 +74,10 @@ const PreviewLogsPage = () => {
   const [logCount, setLogCount] = useState(0);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewPayload, setPreviewPayload] = useState('');
-
-  const now = new Date();
+  const defaultDateRange = useMemo(
+    () => getDefaultPreviewDateRangeStrings(),
+    [],
+  );
   const formInitValues = {
     model_name: '',
     request_id: '',
@@ -76,15 +85,16 @@ const PreviewLogsPage = () => {
     channel: '',
     username: '',
     dateRange: [
-      timestamp2string(getTodayStartTimestamp()),
-      timestamp2string(now.getTime() / 1000 + 3600),
+      defaultDateRange.startTimestamp,
+      defaultDateRange.endTimestamp,
     ],
   };
 
   const getFormValues = useCallback(() => {
     const formValues = formApi ? formApi.getValues() : {};
-    let startTimestamp = timestamp2string(getTodayStartTimestamp());
-    let endTimestamp = timestamp2string(now.getTime() / 1000 + 3600);
+    const fallbackDateRange = getDefaultPreviewDateRangeStrings();
+    let startTimestamp = fallbackDateRange.startTimestamp;
+    let endTimestamp = fallbackDateRange.endTimestamp;
 
     if (
       formValues.dateRange &&
@@ -104,7 +114,7 @@ const PreviewLogsPage = () => {
       start_timestamp: startTimestamp,
       end_timestamp: endTimestamp,
     };
-  }, [formApi, now]);
+  }, [formApi]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
