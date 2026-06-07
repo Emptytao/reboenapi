@@ -19,6 +19,7 @@ import (
 )
 
 type previewTestAdaptor struct{}
+type previewMultipartAdaptor struct{}
 
 func (a *previewTestAdaptor) Init(info *relaycommon.RelayInfo) {}
 func (a *previewTestAdaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
@@ -61,6 +62,48 @@ func (a *previewTestAdaptor) ConvertClaudeRequest(c *gin.Context, info *relaycom
 	return request, nil
 }
 func (a *previewTestAdaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
+	return request, nil
+}
+
+func (a *previewMultipartAdaptor) Init(info *relaycommon.RelayInfo) {}
+func (a *previewMultipartAdaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	return "https://api.example.com/v1/audio/transcriptions", nil
+}
+func (a *previewMultipartAdaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error {
+	req.Set("Authorization", "Bearer top-secret")
+	req.Set("X-Trace-Id", "trace-123")
+	return nil
+}
+func (a *previewMultipartAdaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
+	return request, nil
+}
+func (a *previewMultipartAdaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
+	return request, nil
+}
+func (a *previewMultipartAdaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.EmbeddingRequest) (any, error) {
+	return request, nil
+}
+func (a *previewMultipartAdaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
+	return bytes.NewReader(nil), nil
+}
+func (a *previewMultipartAdaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
+	return request, nil
+}
+func (a *previewMultipartAdaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
+	return request, nil
+}
+func (a *previewMultipartAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
+	return nil, nil
+}
+func (a *previewMultipartAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
+	return nil, nil
+}
+func (a *previewMultipartAdaptor) GetModelList() []string { return nil }
+func (a *previewMultipartAdaptor) GetChannelName() string { return "preview-multipart-test" }
+func (a *previewMultipartAdaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
+	return request, nil
+}
+func (a *previewMultipartAdaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
 	return request, nil
 }
 
@@ -117,17 +160,20 @@ func TestTryWritePreviewFromAdaptorMasksSensitiveHeaders(t *testing.T) {
 	require.Equal(t, "json", relayPayload["response_mode"])
 
 	downstreamPayload := resp["downstream_request"].(map[string]any)
-	downstreamHeaders := downstreamPayload["headers"].(map[string]any)
-	require.Equal(t, "Bearer downstream-secret", downstreamHeaders["Authorization"])
+	downstreamRaw := downstreamPayload["raw_http"].(string)
+	require.Contains(t, downstreamRaw, "POST /v1/chat/completions?foo=bar HTTP/1.1")
+	require.Contains(t, downstreamRaw, "Authorization: Bearer downstream-secret")
+	require.Contains(t, downstreamRaw, "Content-Type: application/json")
+	require.Contains(t, downstreamRaw, `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}`)
 
 	upstreamPayload := resp["upstream_request"].(map[string]any)
-	upstreamHeaders := upstreamPayload["headers"].(map[string]any)
-	require.Equal(t, "Bearer top-secret", upstreamHeaders["Authorization"])
-	require.Equal(t, "secret-key", upstreamHeaders["X-Api-Key"])
-	require.Equal(t, "trace-123", upstreamHeaders["X-Trace-Id"])
-
-	upstreamBody := upstreamPayload["body"].(map[string]any)
-	require.Equal(t, "json", upstreamBody["kind"])
+	upstreamRaw := upstreamPayload["raw_http"].(string)
+	require.Contains(t, upstreamRaw, "POST /v1/messages HTTP/1.1")
+	require.Contains(t, upstreamRaw, "Host: api.example.com")
+	require.Contains(t, upstreamRaw, "Authorization: Bearer top-secret")
+	require.Contains(t, upstreamRaw, "X-Api-Key: secret-key")
+	require.Contains(t, upstreamRaw, "X-Trace-Id: trace-123")
+	require.Contains(t, upstreamRaw, `{"prompt":"hello"}`)
 }
 
 func TestTryWritePreviewFromAdaptorSummarizesMultipartBody(t *testing.T) {
@@ -156,18 +202,22 @@ func TestTryWritePreviewFromAdaptorSummarizesMultipartBody(t *testing.T) {
 		},
 	}
 
-	handled, err := TryWritePreviewFromAdaptor(ctx, info, &previewTestAdaptor{}, bytes.NewBufferString(body))
+	handled, err := TryWritePreviewFromAdaptor(ctx, info, &previewMultipartAdaptor{}, bytes.NewBufferString(body))
 	require.NoError(t, err)
 	require.True(t, handled)
 
 	var resp map[string]any
 	require.NoError(t, appcommon.Unmarshal(recorder.Body.Bytes(), &resp))
 
-	downstreamBody := resp["downstream_request"].(map[string]any)["body"].(map[string]any)
-	require.Equal(t, "summary", downstreamBody["kind"])
+	downstreamRaw := resp["downstream_request"].(map[string]any)["raw_http"].(string)
+	require.Contains(t, downstreamRaw, "POST /v1/audio/transcriptions HTTP/1.1")
+	require.Contains(t, downstreamRaw, "Content-Type: multipart/form-data; boundary=boundary")
+	require.Contains(t, downstreamRaw, "[multipart body omitted in preview,")
 
-	upstreamBody := resp["upstream_request"].(map[string]any)["body"].(map[string]any)
-	require.Equal(t, "summary", upstreamBody["kind"])
+	upstreamRaw := resp["upstream_request"].(map[string]any)["raw_http"].(string)
+	require.Contains(t, upstreamRaw, "POST /v1/audio/transcriptions HTTP/1.1")
+	require.Contains(t, upstreamRaw, "Content-Type: multipart/form-data; boundary=boundary")
+	require.Contains(t, upstreamRaw, "[multipart body omitted in preview,")
 }
 
 func TestChannelOtherSettingsPreviewModeRoundTrip(t *testing.T) {
@@ -214,15 +264,12 @@ func TestTryWritePreviewFromAdaptorReturnsUnavailableForCommonUser(t *testing.T)
 	require.Equal(t, "该模型正在调整，请稍后再试", errorPayload["message"])
 }
 
-func TestBodyPayloadFromLargeJSONReturnsFullJSON(t *testing.T) {
+func TestBodyTextFromLargeJSONReturnsFullJSON(t *testing.T) {
 	t.Parallel()
 
 	largePrompt := strings.Repeat("a", 1<<20+128)
 	payload := []byte(`{"prompt":"` + largePrompt + `"}`)
 
-	result := bodyPayloadFromBytes(payload, "application/json")
-	require.Equal(t, "json", result.Kind)
-	parsed, ok := result.JSON.(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, largePrompt, parsed["prompt"])
+	result := bodyTextFromBytes(payload, "application/json")
+	require.Equal(t, string(payload), result)
 }

@@ -38,22 +38,13 @@ import { useUsageLogsContext } from '../usage-logs-provider'
 import type { PreviewLog } from '../../types'
 import { createChannelColumn } from './column-helpers'
 
-type PreviewBodyPayload = {
-  content_type?: string
-  size?: number
-  kind?: string
-  json?: unknown
-  text?: string
-  summary?: string
-}
-
 type PreviewRequestPayload = {
+  raw_http?: string
   method?: string
   path?: string
   query?: Record<string, string[]>
   url?: string
   headers?: Record<string, string>
-  body?: PreviewBodyPayload
 }
 
 type ChannelPreviewResponse = {
@@ -98,14 +89,6 @@ function stringifyPreviewValue(value: unknown): string {
   }
 }
 
-function getPreviewBodyContent(body?: PreviewBodyPayload): string {
-  if (!body) return '-'
-  if (body.kind === 'json') return stringifyPreviewValue(body.json)
-  if (body.kind === 'text') return body.text || '-'
-  if (body.kind === 'summary') return body.summary || '-'
-  return '-'
-}
-
 function PreviewInfoBlock({
   label,
   value,
@@ -139,18 +122,31 @@ function PreviewPacketPanel({
   title: string
   packet?: PreviewRequestPayload
 }) {
+  const packetText = useMemo(() => {
+    if (packet?.raw_http) return packet.raw_http
+    if (!packet) return '-'
+
+    const lines: string[] = []
+    const target = packet.path || packet.url || '/'
+    lines.push(`${packet.method || 'POST'} ${target} HTTP/1.1`)
+    Object.entries(packet.headers || {}).forEach(([key, value]) => {
+      lines.push(`${key}: ${value}`)
+    })
+    lines.push('')
+    return lines.join('\r\n')
+  }, [packet])
+
   return (
     <div className='space-y-3 rounded-xl border p-4'>
-      <div className='text-sm font-semibold'>{title}</div>
-      <PreviewInfoBlock label='Method' value={packet?.method || '-'} />
-      {packet?.path ? <PreviewInfoBlock label='Path' value={packet.path} /> : null}
-      {packet?.url ? <PreviewInfoBlock label='URL' value={packet.url} /> : null}
-      <PreviewInfoBlock label='Query' value={packet?.query || {}} />
-      <PreviewInfoBlock label='Headers' value={packet?.headers || {}} />
-      <PreviewInfoBlock
-        label={`Body (${packet?.body?.kind || 'empty'} / ${packet?.body?.content_type || '-'})`}
-        value={getPreviewBodyContent(packet?.body)}
-      />
+      <div className='flex items-center justify-between gap-2'>
+        <div className='text-sm font-semibold'>{title}</div>
+        {packetText && packetText !== '-' ? (
+          <CopyButton value={packetText} variant='ghost' size='icon' className='size-7' />
+        ) : null}
+      </div>
+      <pre className='max-h-[48vh] overflow-auto rounded-lg bg-muted/20 p-3 text-xs leading-5 whitespace-pre-wrap break-all'>
+        {packetText || '-'}
+      </pre>
     </div>
   )
 }

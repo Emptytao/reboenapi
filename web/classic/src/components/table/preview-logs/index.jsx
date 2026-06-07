@@ -75,20 +75,6 @@ function stringifyPreviewValue(value) {
   }
 }
 
-function getPreviewBodyContent(body) {
-  if (!body) return '-';
-  if (body.kind === 'json') {
-    return stringifyPreviewValue(body.json);
-  }
-  if (body.kind === 'text') {
-    return body.text || '-';
-  }
-  if (body.kind === 'summary') {
-    return body.summary || '-';
-  }
-  return '-';
-}
-
 function getDefaultPreviewDateRangeStrings() {
   return {
     startTimestamp: timestamp2string(getTodayStartTimestamp()),
@@ -397,6 +383,11 @@ const PreviewLogsPage = () => {
 
   const renderPacketCard = useCallback((title, packet) => {
     if (!packet) return null;
+    const packetText = packet.raw_http || [
+      `${packet.method || 'POST'} ${packet.path || packet.url || '/'} HTTP/1.1`,
+      ...Object.entries(packet.headers || {}).map(([key, value]) => `${key}: ${value}`),
+      '',
+    ].join('\r\n');
     return (
       <div
         className='rounded-2xl border p-4 space-y-3'
@@ -407,26 +398,25 @@ const PreviewLogsPage = () => {
           <Button
             type='tertiary'
             size='small'
-            onClick={() => handleCopyText(stringifyPreviewValue(packet), t('已复制数据包'))}
+            onClick={() => handleCopyText(packetText, t('已复制数据包'))}
           >
             {t('复制数据包')}
           </Button>
         </div>
-        <div className='grid grid-cols-1 gap-3'>
-          {renderInfoItem(t('Method'), packet.method || '-', { mono: true })}
-          {packet.path ? renderInfoItem(t('Path'), packet.path, { mono: true, copyable: true }) : null}
-          {packet.url ? renderInfoItem(t('URL'), packet.url, { mono: true, copyable: true }) : null}
-          {renderInfoItem(t('Query'), packet.query || {}, { copyable: true })}
-          {renderInfoItem(t('Headers'), packet.headers || {}, { copyable: true })}
-          {renderInfoItem(
-            `${t('Body')} (${packet.body?.kind || 'empty'} / ${packet.body?.content_type || '-'})`,
-            getPreviewBodyContent(packet.body),
-            { copyable: true },
-          )}
-        </div>
+        <pre
+          className='max-h-[48vh] overflow-auto rounded-xl p-3 text-xs leading-6'
+          style={{
+            background: 'var(--semi-color-fill-0)',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            margin: 0,
+          }}
+        >
+          {packetText || '-'}
+        </pre>
       </div>
     );
-  }, [handleCopyText, renderInfoItem, t]);
+  }, [handleCopyText, t]);
 
   return (
     <>

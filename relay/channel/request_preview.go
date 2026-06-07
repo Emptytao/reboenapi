@@ -5,7 +5,9 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"sort"
 	"strings"
+	"unicode/utf8"
 
 	appcommon "github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -30,12 +32,7 @@ type previewBodyPayload struct {
 }
 
 type previewRequestPayload struct {
-	Method  string              `json:"method"`
-	Path    string              `json:"path,omitempty"`
-	Query   map[string][]string `json:"query,omitempty"`
-	URL     string              `json:"url,omitempty"`
-	Headers map[string]string   `json:"headers,omitempty"`
-	Body    previewBodyPayload  `json:"body"`
+	RawHTTP string `json:"raw_http"`
 }
 
 type channelPreviewResponse struct {
@@ -149,11 +146,11 @@ func writePreviewResponse(c *gin.Context, info *relaycommon.RelayInfo, upstreamR
 	if c == nil || c.Request == nil {
 		return fmt.Errorf("missing request context")
 	}
-	downstreamBody, err := buildDownstreamPreviewBody(c)
+	downstreamPacket, err := buildDownstreamPreviewPacket(c)
 	if err != nil {
 		return err
 	}
-	upstreamBody, err := buildRequestBodyPayload(upstreamReq)
+	upstreamPacket, err := buildUpstreamPreviewPacket(upstreamReq)
 	if err != nil {
 		return err
 	}
@@ -176,19 +173,8 @@ func writePreviewResponse(c *gin.Context, info *relaycommon.RelayInfo, upstreamR
 			RequestConversionChain: relayFormatStrings(info.RequestConversionChain),
 			FinalRequestRelayFmt:   string(info.GetFinalRequestRelayFormat()),
 		},
-		Downstream: previewRequestPayload{
-			Method:  c.Request.Method,
-			Path:    c.Request.URL.Path,
-			Query:   cloneQueryValues(c.Request.URL.Query()),
-			Headers: flattenHeader(c.Request.Header),
-			Body:    downstreamBody,
-		},
-		UpstreamRequest: previewRequestPayload{
-			Method:  upstreamReq.Method,
-			URL:     upstreamReq.URL.String(),
-			Headers: flattenHeader(upstreamReq.Header, upstreamReq.Host),
-			Body:    upstreamBody,
-		},
+		Downstream:      downstreamPacket,
+		UpstreamRequest: upstreamPacket,
 	}
 
 	payloadBytes, err := appcommon.Marshal(rawResp)
@@ -214,27 +200,31 @@ func writePreviewResponse(c *gin.Context, info *relaycommon.RelayInfo, upstreamR
 	return nil
 }
 
-func buildDownstreamPreviewBody(c *gin.Context) (previewBodyPayload, error) {
+func buildDownstreamPreviewPacket(c *gin.Context) (previewRequestPayload, error) {
 	storage, err := appcommon.GetBodyStorage(c)
 	if err != nil {
-		return previewBodyPayload{}, err
+		return previewRequestPayload{}, err
 	}
 	bodyBytes, err := storage.Bytes()
 	if err != nil {
-		return previewBodyPayload{}, err
+		return previewRequestPayload{}, err
 	}
-	return bodyPayloadFromBytes(bodyBytes, c.Request.Header.Get("Content-Type")), nil
+	return previewRequestPayload{
+		RawHTTP: buildHTTPRequestMessage(c.Request, bodyBytes),
+	}, nil
 }
 
-func buildRequestBodyPayload(req *http.Request) (previewBodyPayload, error) {
+func buildUpstreamPreviewPacket(req *http.Request) (previewRequestPayload, error) {
 	if req == nil || req.Body == nil {
-		return previewBodyPayload{Kind: "empty"}, nil
+		return previewRequestPayload{RawHTTP: buildHTTPRequestMessage(req, nil)}, nil
 	}
 	bodyBytes, err := io.ReadAll(req.Body)
 	if err != nil {
-		return previewBodyPayload{}, err
+		return previewRequestPayload{}, err
 	}
-	return bodyPayloadFromBytes(bodyBytes, req.Header.Get("Content-Type")), nil
+	return previewRequestPayload{
+		RawHTTP: buildHTTPRequestMessage(req, bodyBytes),
+	}, nil
 }
 
 func bodyPayloadFromBytes(data []byte, contentType string) previewBodyPayload {
@@ -270,6 +260,90 @@ func bodyPayloadFromBytes(data []byte, contentType string) previewBodyPayload {
 	payload.Kind = "summary"
 	payload.Summary = "Body omitted for binary or unsupported content."
 	return payload
+}
+
+func buildHTTPRequestMessage(req *http.Request, bodyBytes []byte) string {
+	if req == nil {
+		return ""
+	}
+	method := strings.TrimSpace(req.Method)
+	if method == "" {
+		method = http.MethodPost
+	}
+	target := "/"
+	if req.URL != nil {
+		if requestURI := strings.TrimSpace(req.URL.RequestURI()); requestURI != "" {
+			target = requestURI
+		}
+	}
+	proto := strings.TrimSpace(req.Proto)
+	if proto == "" {
+		proto = "HTTP/1.1"
+	}
+
+	var builder strings.Builder
+	builder.WriteString(method)
+	builder.WriteString(" ")
+	builder.WriteString(target)
+	builder.WriteString(" ")
+	builder.WriteString(proto)
+	builder.WriteString("\r\n")
+
+	if host := strings.TrimSpace(req.Host); host != "" {
+		builder.WriteString("Host: ")
+		builder.WriteString(host)
+		builder.WriteString("\r\n")
+	}
+	if req.ContentLength >= 0 && req.Header.Get("Content-Length") == "" {
+		builder.WriteString("Content-Length: ")
+		builder.WriteString(fmt.Sprintf("%d", req.ContentLength))
+		builder.WriteString("\r\n")
+	}
+
+	keys := make([]string, 0, len(req.Header))
+	for key := range req.Header {
+		if strings.EqualFold(key, "host") || strings.EqualFold(key, "content-length") {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		values := req.Header.Values(key)
+		if len(values) == 0 {
+			continue
+		}
+		for _, value := range values {
+			builder.WriteString(key)
+			builder.WriteString(": ")
+			builder.WriteString(strings.TrimSpace(value))
+			builder.WriteString("\r\n")
+		}
+	}
+	builder.WriteString("\r\n")
+	builder.WriteString(bodyTextFromBytes(bodyBytes, req.Header.Get("Content-Type")))
+	return builder.String()
+}
+
+func bodyTextFromBytes(data []byte, contentType string) string {
+	if len(data) == 0 {
+		return ""
+	}
+	normalizedType := normalizeMediaType(contentType)
+	switch {
+	case strings.HasPrefix(normalizedType, "multipart/"):
+		return fmt.Sprintf("[multipart body omitted in preview, %d bytes]", len(data))
+	case isJSONMediaType(normalizedType):
+		return string(data)
+	case looksLikeJSON(data):
+		return string(data)
+	case isTextMediaType(normalizedType):
+		return string(data)
+	case normalizedType == "" && utf8.Valid(data):
+		return string(data)
+	default:
+		return fmt.Sprintf("[binary or unsupported body omitted in preview, content-type=%q, %d bytes]", strings.TrimSpace(contentType), len(data))
+	}
 }
 
 func canRevealSensitivePreviewData(c *gin.Context) bool {
