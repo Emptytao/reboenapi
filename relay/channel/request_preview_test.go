@@ -176,13 +176,25 @@ func TestTryWritePreviewFromAdaptorMasksSensitiveHeaders(t *testing.T) {
 	require.Contains(t, upstreamRaw, `{"prompt":"hello"}`)
 }
 
-func TestTryWritePreviewFromAdaptorSummarizesMultipartBody(t *testing.T) {
+func TestTryWritePreviewFromAdaptorExpandsMultipartFields(t *testing.T) {
 	t.Parallel()
 
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	body := "--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n\r\nhello\r\n--boundary--\r\n"
+	body := strings.Join([]string{
+		"--boundary",
+		"Content-Disposition: form-data; name=\"model\"",
+		"",
+		"omni_flash",
+		"--boundary",
+		"Content-Disposition: form-data; name=\"input_reference[]\"; filename=\"a.png\"",
+		"Content-Type: image/png",
+		"",
+		"PNGDATA",
+		"--boundary--",
+		"",
+	}, "\r\n")
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/audio/transcriptions", bytes.NewBufferString(body))
 	ctx.Request.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
 	ctx.Set("role", appcommon.RoleAdminUser)
@@ -212,12 +224,18 @@ func TestTryWritePreviewFromAdaptorSummarizesMultipartBody(t *testing.T) {
 	downstreamRaw := resp["downstream_request"].(map[string]any)["raw_http"].(string)
 	require.Contains(t, downstreamRaw, "POST /v1/audio/transcriptions HTTP/1.1")
 	require.Contains(t, downstreamRaw, "Content-Type: multipart/form-data; boundary=boundary")
-	require.Contains(t, downstreamRaw, "[multipart body omitted in preview,")
+	require.Contains(t, downstreamRaw, "Content-Disposition: form-data; name=\"model\"")
+	require.Contains(t, downstreamRaw, "\r\n\r\nomni_flash\r\n")
+	require.Contains(t, downstreamRaw, "Content-Disposition: form-data; name=\"input_reference[]\"; filename=\"a.png\"")
+	require.Contains(t, downstreamRaw, "[multipart file content omitted in preview, name=\"input_reference[]\", filename=\"a.png\", content_type=\"image/png\", size=7 bytes]")
 
 	upstreamRaw := resp["upstream_request"].(map[string]any)["raw_http"].(string)
 	require.Contains(t, upstreamRaw, "POST /v1/audio/transcriptions HTTP/1.1")
 	require.Contains(t, upstreamRaw, "Content-Type: multipart/form-data; boundary=boundary")
-	require.Contains(t, upstreamRaw, "[multipart body omitted in preview,")
+	require.Contains(t, upstreamRaw, "Content-Disposition: form-data; name=\"model\"")
+	require.Contains(t, upstreamRaw, "\r\n\r\nomni_flash\r\n")
+	require.Contains(t, upstreamRaw, "Content-Disposition: form-data; name=\"input_reference[]\"; filename=\"a.png\"")
+	require.Contains(t, upstreamRaw, "[multipart file content omitted in preview, name=\"input_reference[]\", filename=\"a.png\", content_type=\"image/png\", size=7 bytes]")
 }
 
 func TestChannelOtherSettingsPreviewModeRoundTrip(t *testing.T) {

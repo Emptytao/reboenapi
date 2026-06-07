@@ -1,9 +1,11 @@
 package channel
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"sort"
 	"strings"
@@ -332,6 +334,9 @@ func bodyTextFromBytes(data []byte, contentType string) string {
 	normalizedType := normalizeMediaType(contentType)
 	switch {
 	case strings.HasPrefix(normalizedType, "multipart/"):
+		if rendered, ok := buildMultipartPreviewBody(data, contentType); ok {
+			return rendered
+		}
 		return fmt.Sprintf("[multipart body omitted in preview, %d bytes]", len(data))
 	case isJSONMediaType(normalizedType):
 		return string(data)
@@ -344,6 +349,108 @@ func bodyTextFromBytes(data []byte, contentType string) string {
 	default:
 		return fmt.Sprintf("[binary or unsupported body omitted in preview, content-type=%q, %d bytes]", strings.TrimSpace(contentType), len(data))
 	}
+}
+
+func buildMultipartPreviewBody(data []byte, contentType string) (string, bool) {
+	_, params, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	if err != nil {
+		return "", false
+	}
+	boundary := strings.TrimSpace(params["boundary"])
+	if boundary == "" {
+		return "", false
+	}
+
+	reader := multipart.NewReader(bytes.NewReader(data), boundary)
+	var builder strings.Builder
+	partCount := 0
+
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", false
+		}
+
+		partCount++
+		builder.WriteString("--")
+		builder.WriteString(boundary)
+		builder.WriteString("\r\n")
+
+		keys := make([]string, 0, len(part.Header))
+		for key := range part.Header {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			values := part.Header.Values(key)
+			for _, value := range values {
+				builder.WriteString(key)
+				builder.WriteString(": ")
+				builder.WriteString(strings.TrimSpace(value))
+				builder.WriteString("\r\n")
+			}
+		}
+		builder.WriteString("\r\n")
+
+		partBytes, err := io.ReadAll(part)
+		if err != nil {
+			return "", false
+		}
+		if shouldInlineMultipartPart(part, partBytes) {
+			builder.Write(partBytes)
+		} else {
+			builder.WriteString(buildMultipartPartPlaceholder(part, partBytes))
+		}
+		builder.WriteString("\r\n")
+	}
+
+	if partCount == 0 {
+		return "", false
+	}
+
+	builder.WriteString("--")
+	builder.WriteString(boundary)
+	builder.WriteString("--")
+	return builder.String(), true
+}
+
+func shouldInlineMultipartPart(part *multipart.Part, data []byte) bool {
+	if part == nil {
+		return false
+	}
+	if part.FileName() != "" {
+		return false
+	}
+	normalizedType := normalizeMediaType(part.Header.Get("Content-Type"))
+	if isJSONMediaType(normalizedType) || isTextMediaType(normalizedType) {
+		return true
+	}
+	return utf8.Valid(data)
+}
+
+func buildMultipartPartPlaceholder(part *multipart.Part, data []byte) string {
+	if part == nil {
+		return fmt.Sprintf("[multipart content omitted in preview, %d bytes]", len(data))
+	}
+	name := strings.TrimSpace(part.FormName())
+	filename := strings.TrimSpace(part.FileName())
+	contentType := strings.TrimSpace(part.Header.Get("Content-Type"))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	var segments []string
+	if name != "" {
+		segments = append(segments, fmt.Sprintf("name=%q", name))
+	}
+	if filename != "" {
+		segments = append(segments, fmt.Sprintf("filename=%q", filename))
+	}
+	segments = append(segments, fmt.Sprintf("content_type=%q", contentType))
+	segments = append(segments, fmt.Sprintf("size=%d bytes", len(data)))
+	return "[multipart file content omitted in preview, " + strings.Join(segments, ", ") + "]"
 }
 
 func canRevealSensitivePreviewData(c *gin.Context) bool {
