@@ -44,12 +44,10 @@ func TestRelayTaskSubmitPreviewModeSkipsTaskCreationFlow(t *testing.T) {
 	require.Nil(t, result)
 	require.True(t, relaychannel.IsRequestPreviewHandled(ctx))
 	require.Empty(t, info.PublicTaskID)
-	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 
 	var resp map[string]any
 	require.NoError(t, appcommon.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, "channel_request_preview", resp["object"])
-
-	channelPayload := resp["channel"].(map[string]any)
-	require.EqualValues(t, constant.ChannelTypeHKCOPP, int(channelPayload["type"].(float64)))
+	errorPayload := resp["error"].(map[string]any)
+	require.Equal(t, "该模型正在调试中", errorPayload["message"])
 }

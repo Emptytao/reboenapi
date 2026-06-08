@@ -107,7 +107,7 @@ func (a *previewMultipartAdaptor) ConvertGeminiRequest(c *gin.Context, info *rel
 	return request, nil
 }
 
-func TestTryWritePreviewFromAdaptorMasksSensitiveHeaders(t *testing.T) {
+func TestTryWritePreviewFromAdaptorReturnsUnavailableForAdminCaller(t *testing.T) {
 	t.Parallel()
 
 	gin.SetMode(gin.TestMode)
@@ -144,39 +144,15 @@ func TestTryWritePreviewFromAdaptorMasksSensitiveHeaders(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.True(t, IsRequestPreviewHandled(ctx))
-	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 
 	var resp map[string]any
 	require.NoError(t, appcommon.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, "channel_request_preview", resp["object"])
-
-	channelPayload, ok := resp["channel"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "claude-3-5-sonnet", channelPayload["upstream_model"])
-
-	relayPayload, ok := resp["relay"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "chat_completions", relayPayload["relay_mode"])
-	require.Equal(t, "json", relayPayload["response_mode"])
-
-	downstreamPayload := resp["downstream_request"].(map[string]any)
-	downstreamRaw := downstreamPayload["raw_http"].(string)
-	require.Contains(t, downstreamRaw, "POST /v1/chat/completions?foo=bar HTTP/1.1")
-	require.Contains(t, downstreamRaw, "Authorization: Bearer downstream-secret")
-	require.Contains(t, downstreamRaw, "Content-Type: application/json")
-	require.Contains(t, downstreamRaw, `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}`)
-
-	upstreamPayload := resp["upstream_request"].(map[string]any)
-	upstreamRaw := upstreamPayload["raw_http"].(string)
-	require.Contains(t, upstreamRaw, "POST /v1/messages HTTP/1.1")
-	require.Contains(t, upstreamRaw, "Host: api.example.com")
-	require.Contains(t, upstreamRaw, "Authorization: Bearer top-secret")
-	require.Contains(t, upstreamRaw, "X-Api-Key: secret-key")
-	require.Contains(t, upstreamRaw, "X-Trace-Id: trace-123")
-	require.Contains(t, upstreamRaw, `{"prompt":"hello"}`)
+	errorPayload := resp["error"].(map[string]any)
+	require.Equal(t, "该模型正在调试中", errorPayload["message"])
 }
 
-func TestTryWritePreviewFromAdaptorExpandsMultipartFields(t *testing.T) {
+func TestTryWritePreviewFromAdaptorLogsMultipartAndReturnsUnavailable(t *testing.T) {
 	t.Parallel()
 
 	gin.SetMode(gin.TestMode)
@@ -217,25 +193,12 @@ func TestTryWritePreviewFromAdaptorExpandsMultipartFields(t *testing.T) {
 	handled, err := TryWritePreviewFromAdaptor(ctx, info, &previewMultipartAdaptor{}, bytes.NewBufferString(body))
 	require.NoError(t, err)
 	require.True(t, handled)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 
 	var resp map[string]any
 	require.NoError(t, appcommon.Unmarshal(recorder.Body.Bytes(), &resp))
-
-	downstreamRaw := resp["downstream_request"].(map[string]any)["raw_http"].(string)
-	require.Contains(t, downstreamRaw, "POST /v1/audio/transcriptions HTTP/1.1")
-	require.Contains(t, downstreamRaw, "Content-Type: multipart/form-data; boundary=boundary")
-	require.Contains(t, downstreamRaw, "Content-Disposition: form-data; name=\"model\"")
-	require.Contains(t, downstreamRaw, "\r\n\r\nomni_flash\r\n")
-	require.Contains(t, downstreamRaw, "Content-Disposition: form-data; name=\"input_reference[]\"; filename=\"a.png\"")
-	require.Contains(t, downstreamRaw, "[multipart file content omitted in preview, name=\"input_reference[]\", filename=\"a.png\", content_type=\"image/png\", size=7 bytes]")
-
-	upstreamRaw := resp["upstream_request"].(map[string]any)["raw_http"].(string)
-	require.Contains(t, upstreamRaw, "POST /v1/audio/transcriptions HTTP/1.1")
-	require.Contains(t, upstreamRaw, "Content-Type: multipart/form-data; boundary=boundary")
-	require.Contains(t, upstreamRaw, "Content-Disposition: form-data; name=\"model\"")
-	require.Contains(t, upstreamRaw, "\r\n\r\nomni_flash\r\n")
-	require.Contains(t, upstreamRaw, "Content-Disposition: form-data; name=\"input_reference[]\"; filename=\"a.png\"")
-	require.Contains(t, upstreamRaw, "[multipart file content omitted in preview, name=\"input_reference[]\", filename=\"a.png\", content_type=\"image/png\", size=7 bytes]")
+	errorPayload := resp["error"].(map[string]any)
+	require.Equal(t, "该模型正在调试中", errorPayload["message"])
 }
 
 func TestChannelOtherSettingsPreviewModeRoundTrip(t *testing.T) {
@@ -279,7 +242,7 @@ func TestTryWritePreviewFromAdaptorReturnsUnavailableForCommonUser(t *testing.T)
 	var resp map[string]any
 	require.NoError(t, appcommon.Unmarshal(recorder.Body.Bytes(), &resp))
 	errorPayload := resp["error"].(map[string]any)
-	require.Equal(t, "该模型正在调整，请稍后再试", errorPayload["message"])
+	require.Equal(t, "该模型正在调试中", errorPayload["message"])
 }
 
 func TestBodyTextFromLargeJSONReturnsFullJSON(t *testing.T) {

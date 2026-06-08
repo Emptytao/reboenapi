@@ -79,9 +79,6 @@ func TryWritePreviewFromAdaptor(c *gin.Context, info *relaycommon.RelayInfo, ada
 	if info == nil || !info.IsChannelPreviewMode || adaptor == nil {
 		return false, nil
 	}
-	if !canRevealSensitivePreviewData(c) {
-		return true, writePreviewUnavailableResponse(c, info)
-	}
 	req, err := buildPreviewRequestForAdaptor(c, info, adaptor, requestBody)
 	if err != nil {
 		return false, err
@@ -92,9 +89,6 @@ func TryWritePreviewFromAdaptor(c *gin.Context, info *relaycommon.RelayInfo, ada
 func TryWritePreviewFromTaskAdaptor(c *gin.Context, info *relaycommon.RelayInfo, adaptor TaskAdaptor, requestBody io.Reader) (bool, error) {
 	if info == nil || !info.IsChannelPreviewMode || adaptor == nil {
 		return false, nil
-	}
-	if !canRevealSensitivePreviewData(c) {
-		return true, writePreviewUnavailableResponse(c, info)
 	}
 	req, err := buildPreviewRequestForTaskAdaptor(c, info, adaptor, requestBody)
 	if err != nil {
@@ -195,11 +189,7 @@ func writePreviewResponse(c *gin.Context, info *relaycommon.RelayInfo, upstreamR
 			Payload:               string(payloadBytes),
 		})
 	}
-
-	c.Set(channelRequestPreviewHandledKey, true)
-	c.Abort()
-	c.JSON(http.StatusOK, rawResp)
-	return nil
+	return writePreviewUnavailableResponse(c, info)
 }
 
 func buildDownstreamPreviewPacket(c *gin.Context) (previewRequestPayload, error) {
@@ -453,27 +443,12 @@ func buildMultipartPartPlaceholder(part *multipart.Part, data []byte) string {
 	return "[multipart file content omitted in preview, " + strings.Join(segments, ", ") + "]"
 }
 
-func canRevealSensitivePreviewData(c *gin.Context) bool {
-	if c == nil {
-		return false
-	}
-	role := c.GetInt("role")
-	if role >= appcommon.RoleAdminUser {
-		return true
-	}
-	userID := c.GetInt("id")
-	if userID == 0 {
-		return false
-	}
-	return model.IsAdmin(userID)
-}
-
 func writePreviewUnavailableResponse(c *gin.Context, info *relaycommon.RelayInfo) error {
 	if c == nil {
 		return fmt.Errorf("missing request context")
 	}
 	newAPIError := types.NewErrorWithStatusCode(
-		fmt.Errorf("该模型正在调整，请稍后再试"),
+		fmt.Errorf("该模型正在调试中"),
 		types.ErrorCodeBadResponse,
 		http.StatusServiceUnavailable,
 		types.ErrOptionWithSkipRetry(),
