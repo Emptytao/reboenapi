@@ -44,6 +44,18 @@ func isGrokModelName(modelName string) bool {
 	}
 }
 
+func isConfiguredGrokModelName(modelName string, info *relaycommon.RelayInfo) bool {
+	if info == nil {
+		return false
+	}
+	candidate := strings.TrimSpace(modelName)
+	if candidate == "" {
+		return false
+	}
+	effectiveModelMap := mergeSpottedFrogModelMap(info.ChannelOtherSettings.SpottedFrogModelMap)
+	return strings.EqualFold(candidate, strings.TrimSpace(effectiveModelMap.GrokImagineVideo))
+}
+
 func isGrokRequest(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) bool {
 	candidates := make([]string, 0, 4)
 	if info != nil {
@@ -53,7 +65,7 @@ func isGrokRequest(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) 
 		candidates = append(candidates, req.Model)
 	}
 	for _, candidate := range candidates {
-		if isGrokModelName(candidate) {
+		if isGrokModelName(candidate) || isConfiguredGrokModelName(candidate, info) {
 			return true
 		}
 	}
@@ -139,27 +151,24 @@ func collectGrokImageURLs(c *gin.Context, req *relaycommon.TaskSubmitReq, meta m
 	if err != nil {
 		return nil, err
 	}
-	if len(files) > 0 {
-		urls := make([]string, 0, len(files))
-		for _, file := range files {
-			filename, err := storeImageBytes(file.Data, file.ContentType)
-			if err != nil {
-				return nil, err
-			}
-			publicURL, err := publicImageURL(filename)
-			if err != nil {
-				return nil, err
-			}
-			urls = append(urls, publicURL)
-		}
-		return urls, nil
-	}
 
 	rawRefs := grokRawImageReferences(req, meta)
-	if len(rawRefs) == 0 {
+	if len(files) == 0 && len(rawRefs) == 0 {
 		return nil, nil
 	}
-	urls := make([]string, 0, len(rawRefs))
+
+	urls := make([]string, 0, len(files)+len(rawRefs))
+	for _, file := range files {
+		filename, err := storeImageBytes(file.Data, file.ContentType)
+		if err != nil {
+			return nil, err
+		}
+		publicURL, err := publicImageURL(filename)
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, publicURL)
+	}
 	for _, rawRef := range rawRefs {
 		url, err := storeImageFromString(rawRef)
 		if err != nil {
@@ -190,19 +199,12 @@ func grokRawImageReferences(req *relaycommon.TaskSubmitReq, meta metadataPayload
 		}
 	}
 
-	if len(req.Images) > 0 {
-		appendRefs(req.Images)
-	} else if strings.TrimSpace(req.Image) != "" {
-		appendRef(req.Image)
-	} else if len(meta.Images) > 0 {
-		appendRefs(meta.Images)
-	} else if strings.TrimSpace(meta.Image) != "" {
-		appendRef(meta.Image)
-	} else if len(meta.ReferenceImages) > 0 {
-		appendRefs(meta.ReferenceImages)
-	} else {
-		appendRefs(parseInputReferenceValues(req.InputReference))
-	}
+	appendRefs(req.Images)
+	appendRef(req.Image)
+	appendRefs(meta.Images)
+	appendRef(meta.Image)
+	appendRefs(meta.ReferenceImages)
+	appendRefs(parseInputReferenceValues(req.InputReference))
 
 	return refs
 }

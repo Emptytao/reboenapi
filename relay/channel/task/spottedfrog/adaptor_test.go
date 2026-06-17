@@ -7,6 +7,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 
@@ -448,6 +451,304 @@ func TestBuildOmniTextRequestBodyIncludesGenerateAudioWhenEnabled(t *testing.T) 
 	}
 	if payload["generate_audio"] != true {
 		t.Fatalf("generate_audio = %#v", payload["generate_audio"])
+	}
+}
+
+func TestGrokRawImageReferencesMergesAllCompatibleSources(t *testing.T) {
+	req := relaycommon.TaskSubmitReq{
+		Images:         []string{"https://example.com/one.png"},
+		Image:          "https://example.com/two.png",
+		InputReference: `["https://example.com/three.png", "https://example.com/one.png"]`,
+		Metadata: map[string]interface{}{
+			"images":           []string{"https://example.com/four.png"},
+			"image":            "https://example.com/five.png",
+			"reference_images": []string{"https://example.com/six.png"},
+		},
+	}
+	var meta metadataPayload
+	if err := taskcommon.UnmarshalMetadata(req.Metadata, &meta); err != nil {
+		t.Fatal(err)
+	}
+	got := grokRawImageReferences(&req, meta)
+	want := []string{
+		"https://example.com/one.png",
+		"https://example.com/two.png",
+		"https://example.com/four.png",
+		"https://example.com/five.png",
+		"https://example.com/six.png",
+		"https://example.com/three.png",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(got)=%d want=%d got=%#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got[%d]=%q want=%q full=%#v", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestIsGrokRequestRecognizesConfiguredOverride(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelOtherSettings: dto.ChannelOtherSettings{
+				SpottedFrogModelMap: &dto.SpottedFrogModelMap{
+					GrokImagineVideo: "custom-grok-video",
+				},
+			},
+		},
+	}
+	req := relaycommon.TaskSubmitReq{Model: "custom-grok-video"}
+	if !isGrokRequest(&req, info) {
+		t.Fatal("expected configured grok model to be recognized")
+	}
+}
+
+func TestBuildGrokSingleImageRequestBodyJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	req := relaycommon.TaskSubmitReq{
+		Model:    "grok-imagine-video",
+		Prompt:   "single image",
+		Seconds:  "10",
+		Size:     "720x1280",
+		Image:    "https://example.com/reference.jpg",
+		Metadata: map[string]interface{}{"resolution_name": "720p"},
+	}
+	c.Set("task_request", req)
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "grok-imagine-video",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "grok-imagine-video",
+		},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	a := &TaskAdaptor{}
+
+	bodyReader, err := a.BuildRequestBody(c, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyBytes, err := io.ReadAll(bodyReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload grokRequestPayload
+	if err := common.Unmarshal(bodyBytes, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Model != "grok-imagine-video-1.5-preview" {
+		t.Fatalf("model = %q", payload.Model)
+	}
+	if payload.ImageURL != "https://example.com/reference.jpg" {
+		t.Fatalf("image_url = %q", payload.ImageURL)
+	}
+	if len(payload.ImageReference) != 0 {
+		t.Fatalf("image_reference = %#v", payload.ImageReference)
+	}
+	if payload.Seconds != "10" {
+		t.Fatalf("seconds = %q", payload.Seconds)
+	}
+	if payload.Size != "720x1280" {
+		t.Fatalf("size = %q", payload.Size)
+	}
+	if payload.ResolutionName != "720p" {
+		t.Fatalf("resolution_name = %q", payload.ResolutionName)
+	}
+
+	upstreamURL, err := a.BuildRequestURL(info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upstreamURL != "https://api.hellobabygo.com/v1/videos" {
+		t.Fatalf("BuildRequestURL = %q", upstreamURL)
+	}
+	upstreamReq, err := http.NewRequest(http.MethodPost, upstreamURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.BuildRequestHeader(c, upstreamReq, info); err != nil {
+		t.Fatal(err)
+	}
+	if got := upstreamReq.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	if got := upstreamReq.Header.Get("Prefer"); got != "" {
+		t.Fatalf("Prefer should be empty, got %q", got)
+	}
+}
+
+func TestBuildGrokConfiguredOverrideRequestBodyUsesCustomModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	req := relaycommon.TaskSubmitReq{
+		Model:    "my-grok-alias",
+		Prompt:   "custom override",
+		Duration: 15,
+		Image:    "https://example.com/override.jpg",
+		Metadata: map[string]interface{}{"aspect_ratio": "16:9"},
+	}
+	c.Set("task_request", req)
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "my-grok-alias",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "custom-grok-video",
+			ChannelOtherSettings: dto.ChannelOtherSettings{
+				SpottedFrogModelMap: &dto.SpottedFrogModelMap{
+					GrokImagineVideo: "custom-grok-video",
+				},
+			},
+		},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	a := &TaskAdaptor{}
+
+	bodyReader, err := a.BuildRequestBody(c, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyBytes, err := io.ReadAll(bodyReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload grokRequestPayload
+	if err := common.Unmarshal(bodyBytes, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Model != "custom-grok-video" {
+		t.Fatalf("model = %q", payload.Model)
+	}
+	if payload.Seconds != "15" {
+		t.Fatalf("seconds = %q", payload.Seconds)
+	}
+	if payload.Size != "1280x720" {
+		t.Fatalf("size = %q", payload.Size)
+	}
+
+	upstreamURL, err := a.BuildRequestURL(info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upstreamURL != "https://api.hellobabygo.com/v1/videos" {
+		t.Fatalf("BuildRequestURL = %q", upstreamURL)
+	}
+}
+
+func TestBuildGrokMultiImageRequestBodyStoresLocalImages(t *testing.T) {
+	oldBaseURL := common.TaskImagePublicBaseURL
+	common.TaskImagePublicBaseURL = "https://unit.test"
+	defer func() {
+		common.TaskImagePublicBaseURL = oldBaseURL
+	}()
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpDir := t.TempDir()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	req := relaycommon.TaskSubmitReq{
+		Model:   "grok-imagine-video",
+		Prompt:  "multi image",
+		Seconds: "10",
+		Images: []string{
+			"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+			"https://example.com/external.png",
+		},
+	}
+	c.Set("task_request", req)
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "grok-imagine-video",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "grok-imagine-video",
+		},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	}
+	a := &TaskAdaptor{}
+
+	bodyReader, err := a.BuildRequestBody(c, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyBytes, err := io.ReadAll(bodyReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload grokRequestPayload
+	if err := common.Unmarshal(bodyBytes, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ImageURL != "" {
+		t.Fatalf("image_url should be empty for multi image payload, got %q", payload.ImageURL)
+	}
+	if len(payload.ImageReference) != 2 {
+		t.Fatalf("image_reference len = %d", len(payload.ImageReference))
+	}
+	if !strings.HasPrefix(payload.ImageReference[0].ImageURL.URL, "https://unit.test/img/") {
+		t.Fatalf("stored image url = %q", payload.ImageReference[0].ImageURL.URL)
+	}
+	if payload.ImageReference[1].ImageURL.URL != "https://example.com/external.png" {
+		t.Fatalf("external image url = %q", payload.ImageReference[1].ImageURL.URL)
+	}
+	matches, err := filepath.Glob(filepath.Join(tmpDir, "img", "*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("stored files = %#v", matches)
+	}
+}
+
+func TestFetchTaskUsesPlainEndpointForGrok(t *testing.T) {
+	service.InitHttpClient()
+	callPaths := make([]string, 0, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callPaths = append(callPaths, r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"grok-task-1","status":"queued"}`))
+	}))
+	defer server.Close()
+
+	a := &TaskAdaptor{}
+	resp, err := a.FetchTask(server.URL, "sk-test", map[string]any{
+		"task_id":      "grok-task-1",
+		"origin_model": "grok-imagine-video",
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if len(callPaths) != 1 {
+		t.Fatalf("call paths = %#v", callPaths)
+	}
+	if callPaths[0] != "/v1/videos/grok-task-1" {
+		t.Fatalf("call path = %q", callPaths[0])
 	}
 }
 
