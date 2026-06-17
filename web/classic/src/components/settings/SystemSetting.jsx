@@ -101,6 +101,7 @@ const SystemSetting = () => {
     LinuxDOClientSecret: '',
     LinuxDOMinimumTrustLevel: '',
     ServerAddress: '',
+    TaskImagePublicBaseURL: '',
     // SSRF防护配置
     'fetch_setting.enable_ssrf_protection': true,
     'fetch_setting.allow_private_ip': '',
@@ -316,7 +317,16 @@ const SystemSetting = () => {
 
   const submitServerAddress = async () => {
     let ServerAddress = removeTrailingSlash(inputs.ServerAddress);
-    await updateOptions([{ key: 'ServerAddress', value: ServerAddress }]);
+    let TaskImagePublicBaseURL = removeTrailingSlash(
+      inputs.TaskImagePublicBaseURL || '',
+    );
+    await updateOptions([
+      { key: 'ServerAddress', value: ServerAddress },
+      {
+        key: 'TaskImagePublicBaseURL',
+        value: TaskImagePublicBaseURL,
+      },
+    ]);
   };
 
   const submitSMTP = async () => {
@@ -728,9 +738,19 @@ const SystemSetting = () => {
                         )}
                       />
                     </Col>
+                    <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                      <Form.Input
+                        field='TaskImagePublicBaseURL'
+                        label={t('任务图片公开地址')}
+                        placeholder='https://yourdomain.com'
+                        extraText={t(
+                          '仅用于斑点蛙 Grok 图生视频。系统会自动拼接为 /img/文件名',
+                        )}
+                      />
+                    </Col>
                   </Row>
                   <Button onClick={submitServerAddress}>
-                    {t('更新服务器地址')}
+                    {t('更新站点地址设置')}
                   </Button>
                 </Form.Section>
               </Card>

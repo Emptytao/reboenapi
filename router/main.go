@@ -13,6 +13,7 @@ import (
 )
 
 func SetRouter(router *gin.Engine, assets ThemeAssets) {
+	router.Static("/img", "./img")
 	SetApiRouter(router)
 	SetDashboardRouter(router)
 	SetRelayRouter(router)

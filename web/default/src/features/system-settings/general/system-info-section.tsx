@@ -57,6 +57,7 @@ const _systemInfoSchema = z.object({
   }),
   SystemName: z.string().min(1),
   ServerAddress: z.string().optional(),
+  TaskImagePublicBaseURL: z.string().optional(),
   Logo: z.string().url().optional().or(z.literal('')),
   Footer: z.string().optional(),
   About: z.string().optional(),
@@ -89,6 +90,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
     },
     SystemName: normalizeValue(defaultValues.SystemName),
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
+    TaskImagePublicBaseURL: normalizeValue(defaultValues.TaskImagePublicBaseURL),
     Logo: normalizeValue(defaultValues.Logo),
     Footer: normalizeValue(defaultValues.Footer),
     About: normalizeValue(defaultValues.About),
@@ -107,6 +109,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
       error: () => t('System name is required'),
     }),
     ServerAddress: z.string().optional(),
+    TaskImagePublicBaseURL: z.string().optional(),
     Logo: z.string().url().optional().or(z.literal('')),
     Footer: z.string().optional(),
     About: z.string().optional(),
@@ -129,6 +132,9 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         for (const [key, value] of Object.entries(changedFields)) {
           let v = normalizeValue(value)
           if (key === 'ServerAddress') {
+            v = v.replace(/\/+$/, '')
+          }
+          if (key === 'TaskImagePublicBaseURL') {
             v = v.replace(/\/+$/, '')
           }
           await updateOption.mutateAsync({
@@ -229,6 +235,25 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                     <FormDescription>
                       {t(
                         'The public URL of your server, used for OAuth callbacks, webhooks, and other external integrations'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='TaskImagePublicBaseURL'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Task Image Public Base URL')}</FormLabel>
+                    <FormControl>
+                      <Input placeholder='https://yourdomain.com' {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'The public site root used to expose saved Grok task images. The system will append /img/<filename> automatically.'
                       )}
                     </FormDescription>
                     <FormMessage />

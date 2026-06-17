@@ -65,6 +65,7 @@ export type SiteSettings = {
   About: string
   HomePageContent: string
   ServerAddress: string
+  TaskImagePublicBaseURL: string
   'legal.user_agreement': string
   'legal.privacy_policy': string
   HeaderNavModules: string

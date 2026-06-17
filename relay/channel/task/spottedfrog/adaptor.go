@@ -54,6 +54,7 @@ type metadataPayload struct {
 	Variant         string   `json:"variant,omitempty"`
 	Speed           string   `json:"speed,omitempty"`
 	Resolution      string   `json:"resolution,omitempty"`
+	ResolutionName  string   `json:"resolution_name,omitempty"`
 	AspectRatio     string   `json:"aspect_ratio,omitempty"`
 	Ratio           string   `json:"ratio,omitempty"`
 	Audio           *bool    `json:"audio,omitempty"`
@@ -128,6 +129,12 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if imagesCount == 0 {
 		imagesCount = countMultipartReferenceFiles(c)
 	}
+	if isGrokRequest(&req, info) {
+		imagesCount = grokReferenceCount(c, &req, meta)
+		if imagesCount == 0 {
+			return service.TaskErrorWrapperLocal(fmt.Errorf("grok-imagine-video requires at least one reference image"), "invalid_request", http.StatusBadRequest)
+		}
+	}
 	if isOmniFlashRequest(&req, info) && imagesCount > 7 {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("omni_flash supports at most 7 reference images"), "invalid_request", http.StatusBadRequest)
 	}
@@ -145,11 +152,14 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return nil
 }
 
-func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
+func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	if isGrokRequest(nil, info) {
+		return normalizeBaseURL(a.baseURL) + "/v1" + videosEndpoint, nil
+	}
 	return normalizeBaseURL(a.baseURL) + "/v1" + videosEndpoint + "?async=true", nil
 }
 
-func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
+func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	contentType := "application/json"
 	if c != nil {
 		if value, exists := c.Get(spottedFrogRequestContentTypeKey); exists {
@@ -164,7 +174,9 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, _ *r
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
-	req.Header.Set("Prefer", "respond-async")
+	if !isGrokRequest(nil, info) {
+		req.Header.Set("Prefer", "respond-async")
+	}
 	return nil
 }
 
@@ -175,6 +187,9 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	}
 	if isOmniFlashRequest(&req, info) {
 		return a.buildOmniRequestBody(c, &req, info)
+	}
+	if isGrokRequest(&req, info) {
+		return a.buildGrokRequestBody(c, &req, info)
 	}
 	body, err := a.convertToRequestPayload(&req, info)
 	if err != nil {
@@ -230,6 +245,14 @@ func (a *TaskAdaptor) FetchTask(baseURL, key string, body map[string]any, proxy 
 	taskID, ok := body["task_id"].(string)
 	if !ok || taskID == "" {
 		return nil, fmt.Errorf("invalid task_id")
+	}
+	if modelName, _ := body["origin_model"].(string); isGrokModelName(modelName) {
+		uri := fmt.Sprintf("%s/v1%s/%s", normalizeBaseURL(baseURL), videosEndpoint, url.PathEscape(taskID))
+		return doSpottedFrogFetchTask(uri, key, proxy)
+	}
+	if modelName, _ := body["model"].(string); isGrokModelName(modelName) {
+		uri := fmt.Sprintf("%s/v1%s/%s", normalizeBaseURL(baseURL), videosEndpoint, url.PathEscape(taskID))
+		return doSpottedFrogFetchTask(uri, key, proxy)
 	}
 	asyncURI := fmt.Sprintf("%s/v1%s/%s?async=true", normalizeBaseURL(baseURL), videosEndpoint, url.PathEscape(taskID))
 	resp, err := doSpottedFrogFetchTask(asyncURI, key, proxy)
@@ -482,7 +505,7 @@ func mapUpstreamModel(req *relaycommon.TaskSubmitReq, modelName string, override
 	_ = taskcommon.UnmarshalMetadata(req.Metadata, &meta)
 	duration, ok := requestDuration(req)
 	aspect := aspectToken(requestAspectRatio(req.Size, meta))
-	switch logicalModel {
+	switch normalizeVideoModelName(logicalModel) {
 	case "sora-2":
 		if !ok || duration <= 0 {
 			duration = 12
@@ -503,11 +526,11 @@ func mapUpstreamModel(req *relaycommon.TaskSubmitReq, modelName string, override
 			return mapSoraProModel(effectiveModelMap, aspect), nil
 		}
 		return mapSoraModel(effectiveModelMap, duration, aspect), nil
-	case "omni_flash", "grok-imagine-video":
-		if logicalModel == "omni_flash" && len(normalizedImages(req, meta)) > 7 {
-			return "", fmt.Errorf("omni_flash supports at most 7 reference images")
-		}
-		if logicalModel == "omni_flash" {
+	case "omni", "omni_flash", "grok", "grok-imagine-video", "grok-imagine-video-1.5-preview":
+		if normalizeVideoModelName(logicalModel) == "omni_flash" || normalizeVideoModelName(logicalModel) == "omni" {
+			if len(normalizedImages(req, meta)) > 7 {
+				return "", fmt.Errorf("omni_flash supports at most 7 reference images")
+			}
 			return effectiveModelMap.OmniFlash, nil
 		}
 		return effectiveModelMap.GrokImagineVideo, nil
@@ -943,8 +966,12 @@ func requestAspectRatio(size string, meta metadataPayload) string {
 		return "16:9"
 	case "1080x1920", "720x1280":
 		return "9:16"
-	case "1024x1024", "512x512":
+	case "1024x1024", "1080x1080", "512x512":
 		return "1:1"
+	case "1792x1024":
+		return "3:2"
+	case "1024x1792":
+		return "2:3"
 	default:
 		return ratioFromSize(size)
 	}
@@ -960,24 +987,37 @@ func ratioFromSize(size string) string {
 	if w <= 0 || h <= 0 {
 		return ""
 	}
-	if w == h {
-		return "1:1"
+	g := greatestCommonDivisor(w, h)
+	if g <= 0 {
+		return ""
 	}
-	if w > h {
-		return "16:9"
+	switch fmt.Sprintf("%d:%d", w/g, h/g) {
+	case "1:1", "16:9", "9:16", "3:2", "2:3":
+		return fmt.Sprintf("%d:%d", w/g, h/g)
+	default:
+		return ""
 	}
-	return "9:16"
 }
 
 func aspectToken(ratio string) string {
 	ratio = strings.ToLower(strings.TrimSpace(ratio))
 	ratio = strings.ReplaceAll(ratio, ":", "x")
 	switch ratio {
-	case "16x9", "9x16", "1x1":
+	case "16x9", "9x16", "1x1", "3x2", "2x3":
 		return ratio
 	default:
 		return ""
 	}
+}
+
+func greatestCommonDivisor(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	if a < 0 {
+		return -a
+	}
+	return a
 }
 
 func resolutionToken(resolution, size string) string {

@@ -91,6 +91,7 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 		Mode:           formData.Get("mode"),
 		Image:          formData.Get("image"),
 		Size:           formData.Get("size"),
+		InputReference: formData.Get("input_reference"),
 		ResponseFormat: formData.Get("response_format"),
 		Metadata:       make(map[string]interface{}),
 	}
