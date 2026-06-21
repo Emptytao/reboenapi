@@ -47,7 +47,7 @@ const routerMap = {
   task: '/console/task',
   models: '/console/models',
   deployment: '/console/deployment',
-  playground: '/console/playground',
+  playground: '/playground',
   personal: '/console/personal',
 };
 

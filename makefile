@@ -1,5 +1,6 @@
 FRONTEND_DIR = ./web/default
 FRONTEND_CLASSIC_DIR = ./web/classic
+PLAYGROUND_DIR = ./playground
 BACKEND_DIR = .
 DEV_COMPOSE_FILE = docker-compose.dev.yml
 DEV_POSTGRES_SERVICE = postgres
@@ -8,7 +9,7 @@ DEV_POSTGRES_DB = new-api
 DEV_POSTGRES_USER = root
 DEV_SQLITE_PATH ?= one-api.db
 
-.PHONY: all build-frontend build-frontend-classic build-all-frontends start-backend dev dev-api dev-api-rebuild dev-web dev-web-classic reset-setup
+.PHONY: all build-frontend build-frontend-classic build-playground build-all-frontends start-backend dev dev-api dev-api-rebuild dev-web dev-web-classic reset-setup
 
 all: build-all-frontends start-backend
 
@@ -20,7 +21,11 @@ build-frontend-classic:
 	@echo "Building classic frontend..."
 	@cd $(FRONTEND_CLASSIC_DIR) && bun install && VITE_REACT_APP_VERSION=$(cat ../../VERSION) bun run build
 
-build-all-frontends: build-frontend build-frontend-classic
+build-playground:
+	@echo "Building image playground..."
+	@cd $(PLAYGROUND_DIR) && bun install && bun run build
+
+build-all-frontends: build-frontend build-frontend-classic build-playground
 
 start-backend:
 	@echo "Starting backend dev server..."

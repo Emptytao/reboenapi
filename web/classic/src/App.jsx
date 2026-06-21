@@ -50,6 +50,8 @@ import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
 
+const PLAYGROUND_RELOAD_GUARD_KEY = 'newapi_classic_playground_bridge_reload';
+
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const About = lazy(() => import('./pages/About'));
@@ -59,6 +61,48 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 function DynamicOAuth2Callback() {
   const { provider } = useParams();
   return <OAuth2Callback type={provider} />;
+}
+
+function ExternalPlaygroundBridge() {
+  const [reloadFailed, setReloadFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    const target = `/playground/${window.location.search}${window.location.hash}`;
+    if (window.sessionStorage.getItem(PLAYGROUND_RELOAD_GUARD_KEY) === '1') {
+      window.sessionStorage.removeItem(PLAYGROUND_RELOAD_GUARD_KEY);
+      setReloadFailed(true);
+      return;
+    }
+
+    window.sessionStorage.setItem(PLAYGROUND_RELOAD_GUARD_KEY, '1');
+    const timer = window.setTimeout(() => {
+      setReloadFailed(true);
+    }, 2500);
+    window.location.replace(target);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  if (!reloadFailed) {
+    return <Loading tip='Opening Image Playground...' />;
+  }
+
+  return (
+    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ maxWidth: 420, textAlign: 'center' }}>
+        <h2 style={{ marginBottom: 12 }}>Open Image Playground</h2>
+        <p style={{ marginBottom: 16, color: 'var(--semi-color-text-1)' }}>
+          The browser stayed inside the console shell. Use one of the links below to continue.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <a href='/playground/'>Open /playground</a>
+          <a href='/console/playground'>Open built-in chat playground</a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function App() {
@@ -144,6 +188,14 @@ function App() {
           element={
             <PrivateRoute>
               <Token />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/playground'
+          element={
+            <PrivateRoute>
+              <ExternalPlaygroundBridge />
             </PrivateRoute>
           }
         />

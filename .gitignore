@@ -10,6 +10,8 @@ build
 logs
 web/default/dist
 web/classic/dist
+playground/dist
+playground/node_modules
 web/node_modules
 web/dist
 .env

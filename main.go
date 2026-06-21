@@ -47,6 +47,12 @@ var classicBuildFS embed.FS
 //go:embed web/classic/dist/index.html
 var classicIndexPage []byte
 
+//go:embed playground/dist
+var playgroundBuildFS embed.FS
+
+//go:embed playground/dist/index.html
+var playgroundIndexPage []byte
+
 func main() {
 	startTime := time.Now()
 
@@ -191,10 +197,12 @@ func main() {
 
 	// 设置路由
 	router.SetRouter(server, router.ThemeAssets{
-		DefaultBuildFS:   buildFS,
-		DefaultIndexPage: indexPage,
-		ClassicBuildFS:   classicBuildFS,
-		ClassicIndexPage: classicIndexPage,
+		DefaultBuildFS:      buildFS,
+		DefaultIndexPage:    indexPage,
+		ClassicBuildFS:      classicBuildFS,
+		ClassicIndexPage:    classicIndexPage,
+		PlaygroundBuildFS:   playgroundBuildFS,
+		PlaygroundIndexPage: playgroundIndexPage,
 	})
 	var port = os.Getenv("PORT")
 	if port == "" {
@@ -229,6 +237,7 @@ func InjectUmamiAnalytics() {
 	placeholder := []byte("<!--umami-->\n")
 	indexPage = bytes.ReplaceAll(indexPage, placeholder, analyticsInject)
 	classicIndexPage = bytes.ReplaceAll(classicIndexPage, placeholder, analyticsInject)
+	playgroundIndexPage = bytes.ReplaceAll(playgroundIndexPage, placeholder, analyticsInject)
 }
 
 func InjectGoogleAnalytics() {
@@ -253,6 +262,7 @@ func InjectGoogleAnalytics() {
 	placeholder := []byte("<!--Google Analytics-->\n")
 	indexPage = bytes.ReplaceAll(indexPage, placeholder, analyticsInject)
 	classicIndexPage = bytes.ReplaceAll(classicIndexPage, placeholder, analyticsInject)
+	playgroundIndexPage = bytes.ReplaceAll(playgroundIndexPage, placeholder, analyticsInject)
 }
 
 func InitResources() error {

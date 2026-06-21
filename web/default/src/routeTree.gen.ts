@@ -21,6 +21,7 @@ import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as ConsoleTopupRouteImport } from './routes/console/topup'
 import { Route as ConsoleLogRouteImport } from './routes/console/log'
+import { Route as AuthenticatedConsolePlaygroundRouteImport } from './routes/_authenticated/console/playground'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
@@ -127,6 +128,12 @@ const ConsoleLogRoute = ConsoleLogRouteImport.update({
   path: '/console/log',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedConsolePlaygroundRoute =
+  AuthenticatedConsolePlaygroundRouteImport.update({
+    id: '/console/playground',
+    path: '/console/playground',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChat2linkRoute = AuthenticatedChat2linkRouteImport.update({
   id: '/chat2link',
   path: '/chat2link',
@@ -411,6 +418,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
+  '/console/playground': typeof AuthenticatedConsolePlaygroundRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
@@ -469,6 +477,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
+  '/console/playground': typeof AuthenticatedConsolePlaygroundRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
@@ -531,6 +540,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
+  '/_authenticated/console/playground': typeof AuthenticatedConsolePlaygroundRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
@@ -592,6 +602,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/chat2link'
     | '/console/log'
+    | '/console/playground'
     | '/console/topup'
     | '/oauth/$provider'
     | '/about/'
@@ -650,6 +661,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/chat2link'
     | '/console/log'
+    | '/console/playground'
     | '/console/topup'
     | '/oauth/$provider'
     | '/about'
@@ -711,6 +723,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/chat2link'
     | '/console/log'
+    | '/_authenticated/console/playground'
     | '/console/topup'
     | '/oauth/$provider'
     | '/about/'
@@ -858,6 +871,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/console/log'
       preLoaderRoute: typeof ConsoleLogRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/console/playground': {
+      id: '/_authenticated/console/playground'
+      path: '/console/playground'
+      fullPath: '/console/playground'
+      preLoaderRoute: typeof AuthenticatedConsolePlaygroundRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/chat2link': {
       id: '/_authenticated/chat2link'
@@ -1276,6 +1296,7 @@ const AuthenticatedSystemSettingsRouteRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
+  AuthenticatedConsolePlaygroundRoute: typeof AuthenticatedConsolePlaygroundRoute
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
@@ -1298,6 +1319,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemSettingsRouteRoute:
     AuthenticatedSystemSettingsRouteRouteWithChildren,
+  AuthenticatedConsolePlaygroundRoute: AuthenticatedConsolePlaygroundRoute,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
