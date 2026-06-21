@@ -67,7 +67,7 @@ function ExternalPlaygroundBridge() {
   const [reloadFailed, setReloadFailed] = React.useState(false);
 
   React.useEffect(() => {
-    const target = `/playground/${window.location.search}${window.location.hash}`;
+    const target = `/multi-playground/${window.location.search}${window.location.hash}`;
     if (window.sessionStorage.getItem(PLAYGROUND_RELOAD_GUARD_KEY) === '1') {
       window.sessionStorage.removeItem(PLAYGROUND_RELOAD_GUARD_KEY);
       setReloadFailed(true);
@@ -97,7 +97,7 @@ function ExternalPlaygroundBridge() {
           The browser stayed inside the console shell. Use one of the links below to continue.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <a href='/playground/'>Open /playground</a>
+          <a href='/multi-playground/'>Open /multi-playground</a>
           <a href='/console/playground'>Open built-in chat playground</a>
         </div>
       </div>

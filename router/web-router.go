@@ -91,13 +91,12 @@ func registerPlaygroundRoutes(router *gin.Engine, buildFS embed.FS, indexPage []
 		c.FileFromFS(filePath, httpFS)
 	}
 
-	router.GET("/playground", func(c *gin.Context) {
-		target := "/playground/"
+	router.GET("/multi-playground", func(c *gin.Context) {
+		target := "/multi-playground/"
 		if rawQuery := strings.TrimSpace(c.Request.URL.RawQuery); rawQuery != "" {
 			target = fmt.Sprintf("%s?%s", target, rawQuery)
 		}
 		c.Redirect(http.StatusTemporaryRedirect, target)
 	})
-	router.GET("/playground/", serveIndex)
-	router.GET("/playground/*filepath", serveAsset)
+	router.GET("/multi-playground/*filepath", serveAsset)
 }

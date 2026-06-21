@@ -38,7 +38,7 @@ function PlaygroundBridgePage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const target = `/playground/${window.location.search}${window.location.hash}`
+    const target = `/multi-playground/${window.location.search}${window.location.hash}`
 
     if (window.sessionStorage.getItem(reloadGuardKey) === '1') {
       window.sessionStorage.removeItem(reloadGuardKey)
@@ -64,8 +64,8 @@ function PlaygroundBridgePage() {
         </div>
         {reloadFailed ? (
           <div className='flex flex-col gap-2 text-sm'>
-            <a className='text-primary underline underline-offset-4' href='/playground/'>
-              Open `/playground`
+            <a className='text-primary underline underline-offset-4' href='/multi-playground/'>
+              Open `/multi-playground`
             </a>
             <a
               className='text-muted-foreground underline underline-offset-4'
