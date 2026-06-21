@@ -22,7 +22,9 @@ export default defineConfig(({ command }) => {
 
   return {
     plugins: [react()],
-    base: command === 'serve' ? '/' : '/playground/',
+    // Use relative asset paths so the built app can be mounted under
+    // different subpaths like /playground/ or /multi-playground/.
+    base: command === 'serve' ? '/' : './',
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
       __DEV_PROXY_CONFIG__: JSON.stringify(devProxyConfig),
