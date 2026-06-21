@@ -1,0 +1,43 @@
+name: Deploy Docker via SSH
+
+on:
+  workflow_run:
+    workflows:
+      - Build Docker image (GHCR)
+    types:
+      - completed
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-docker-via-ssh
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy on remote server
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy with SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || '22' }}
+          script_stop: true
+          script: |
+            set -eu
+            cd "${{ secrets.DEPLOY_WORKDIR }}"
+
+            echo "${{ secrets.DEPLOY_GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.DEPLOY_GHCR_USERNAME }}" --password-stdin
+
+            docker compose -f "${{ secrets.DEPLOY_COMPOSE_FILE }}" pull
+            docker compose -f "${{ secrets.DEPLOY_COMPOSE_FILE }}" up -d
+            docker image prune -f
